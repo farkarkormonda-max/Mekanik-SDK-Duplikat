@@ -1,0 +1,348 @@
+{
+  "users": [
+    {
+      "id": "u1",
+      "nama": "Administrator SDKP Biak",
+      "username": "admin",
+      "password": "admin123",
+      "role": "Administrator",
+      "status": "Aktif"
+    },
+    {
+      "id": "u2",
+      "nama": "Ariyanto Basuki (Kepala Stasiun)",
+      "username": "kepala",
+      "password": "kepala123",
+      "role": "Kepala Stasiun",
+      "status": "Aktif"
+    },
+    {
+      "id": "u3",
+      "nama": "Hendra Wijaya (Verifikator)",
+      "username": "verifikator",
+      "password": "veri123",
+      "role": "Verifikator",
+      "status": "Aktif"
+    },
+    {
+      "id": "u4",
+      "nama": "Petugas Satwas Manokwari",
+      "username": "manokwari",
+      "password": "satwas123",
+      "role": "Satwas",
+      "status": "Aktif"
+    },
+    {
+      "id": "u5",
+      "nama": "Petugas Satwas Jayapura",
+      "username": "jayapura",
+      "password": "satwas123",
+      "role": "Satwas",
+      "status": "Aktif"
+    }
+  ],
+  "pemeriksaan": [
+    {
+      "id": "p1",
+      "tanggal": "2026-02-09",
+      "nomor_spt": "B.353/PSDKPSta.8/KP.440/II/2026",
+      "satwas": "Satwas SDKP Manokwari",
+      "pelaku_usaha": "CV. Regina Rachel",
+      "perusahaan": "CV. Regina Rachel",
+      "jenis_usaha": "Aktivitas Pelabuhan Perikanan",
+      "alamat": "JALAN PASIR PUTIH, KENARI TINGGI, Desa/Kelurahan Pasir Putih, Kec. Manokwari Timur, Kab. Manokwari, Provinsi Papua Barat",
+      "status_ketaatan": "TAAT",
+      "persiapan_spt": true,
+      "persiapan_st": true,
+      "pelaksanaan_dhp": true,
+      "pelaksanaan_no_revisi": true,
+      "pelaporan_lengkap": true,
+      "nilai_persiapan": 40,
+      "nilai_pelaksanaan": 40,
+      "nilai_pelaporan": 20,
+      "nilai_total": 100,
+      "predikat": "Sangat Baik",
+      "temuan": "PKKPRL NO. 31122510519200001",
+      "rekomendasi": "Berdasarkan hasil pengawasan CV Regina Rachel telah memiliki dokumen perizinan yang lengkap dan tidak ditemukan adanya dugaan pelanggaran. Pihak perusahaan juga menyatakan siap untuk menyampaikan laporan tahunan secara berkala sesuai ketentuan yang berlaku.",
+      "created_at": "2026-02-09T08:00:00Z"
+    },
+    {
+      "id": "p2",
+      "tanggal": "2026-02-18",
+      "nomor_spt": "B.394/PSDKPSta.8/KP.440/II/2026",
+      "satwas": "Satwas SDKP Jayapura",
+      "pelaku_usaha": "PT. SKIP (DEMTA BULKING STATION)",
+      "perusahaan": "PT. SKIP (DEMTA BULKING STATION)",
+      "jenis_usaha": "Aktivitas Pelayanan Kepelabuhan Laut",
+      "alamat": "Muris Kecil, Desa Muris Kecil, Kec. Demta, Kab. Jayapura",
+      "status_ketaatan": "TIDAK TAAT",
+      "persiapan_spt": true,
+      "persiapan_st": true,
+      "pelaksanaan_dhp": true,
+      "pelaksanaan_no_revisi": false,
+      "pelaporan_lengkap": true,
+      "nilai_persiapan": 40,
+      "nilai_pelaksanaan": 20,
+      "nilai_pelaporan": 20,
+      "nilai_total": 80,
+      "predikat": "Baik",
+      "temuan": "1. NIB, 2. PB UMKU, 3. Belum ada PKKPRL",
+      "rekomendasi": "Berdasarkan hasil pengawasan pemenuhan PKKPRL di PT SKIP (Demta Bulking Station), diketahui bahwa PT SKIP memanfaatkan ruang laut tanpa memiliki PKKPRL. Sehubungan dengan hal tersebut, UPT merekomendasikan untuk dilakukan pengajuan supervisi kepada Direktorat Pengawasan Sumber Daya Kelautan.",
+      "created_at": "2026-02-18T09:30:00Z"
+    },
+    {
+      "id": "p3",
+      "tanggal": "2026-04-08",
+      "nomor_spt": "B.785/PSDKPSta.8/KP.440/IV/2026",
+      "satwas": "Satwas SDK Nabire",
+      "pelaku_usaha": "PT. Pertamina Patra Niaga Nabire",
+      "perusahaan": "PT. Pertamina Patra Niaga di Nabire",
+      "jenis_usaha": "Dermaga Fuel Terminal Nabire",
+      "alamat": "GD. WISMA TUGU II, LT.2, Jl. HR. Rasuna Said Kav.C 7-9, Desa/Kelurahan Setia Budi, Kec. Setiabudi, kota adm.Jakarta Selatan, Provinsi DKI Jakarta",
+      "status_ketaatan": "TAAT",
+      "persiapan_spt": true,
+      "persiapan_st": true,
+      "pelaksanaan_dhp": true,
+      "pelaksanaan_no_revisi": false,
+      "pelaporan_lengkap": true,
+      "nilai_persiapan": 40,
+      "nilai_pelaksanaan": 20,
+      "nilai_pelaporan": 20,
+      "nilai_total": 80,
+      "predikat": "Baik",
+      "temuan": "1. PKKPRL, 2. NIB. Petugas di BA hanya boleh Polsus PWP3K dan Pengawas Kelautan",
+      "rekomendasi": "Dalam kegiatan pengawasan Pemanfaatan ruang laut yang di gunakan oleh PT. Pertamina pada tanggal 8 april 2026 maka PT. Pertamina dinyatakan taat atau patuh terhadap aturan yang telah di tentukan. PT. Pertamina Patra Niaga Nabire tidak ditemukan adanya dugaan Pelanggaran atau perusakan.",
+      "created_at": "2026-04-08T10:00:00Z"
+    },
+    {
+      "id": "p4",
+      "tanggal": "2026-04-09",
+      "nomor_spt": "B.799/PSDKPSta.8/KP.440/IV/2026",
+      "satwas": "Satwas SDKP Manokwari",
+      "pelaku_usaha": "PT. Grace Gosyen Land Manokwari",
+      "perusahaan": "PT. Grace Gosyen Land Manokwari",
+      "jenis_usaha": "Reklamasi Pantai Wosi Tanpa ijin",
+      "alamat": "JALAN PASIR WOSI, Desa/Kelurahan Wosi, Kec. Manokwari Barat, Kab. Manokwari, Provinsi Papua Barat",
+      "status_ketaatan": "TIDAK TAAT",
+      "persiapan_spt": true,
+      "persiapan_st": true,
+      "pelaksanaan_dhp": true,
+      "pelaksanaan_no_revisi": false,
+      "pelaporan_lengkap": true,
+      "nilai_persiapan": 40,
+      "nilai_pelaksanaan": 20,
+      "nilai_pelaporan": 20,
+      "nilai_total": 80,
+      "predikat": "Baik",
+      "temuan": "Reklamasi Pantai Wosi Tanpa Ijin. Petugas di BA hanya boleh Polsus PWP3K dn Pengawas Kelautan",
+      "rekomendasi": "Dilakukan penghentian sementara terhadap lokasi kegiatan reklamasi sebagai bentuk penghentian kegiatan sampai terpenuhinya kewajiban perizinan, serta pengajuan supervisi kepada Direktorat Pengawasan Sumber Daya Kelautan guna penanganan lebih lanjut.",
+      "created_at": "2026-04-09T08:00:00Z"
+    },
+    {
+      "id": "p5",
+      "tanggal": "2026-04-22",
+      "nomor_spt": "B.957/PSDKPSta.8/KP.440/IV/2026",
+      "satwas": "Satwas SDKP Manokwari",
+      "pelaku_usaha": "PT. Conch West Papua Cement",
+      "perusahaan": "PT. Conch West Papua Cement",
+      "jenis_usaha": "Aktivitas Dermaga (Industri Semen)",
+      "alamat": "Desa Maruni, Jl Kampung Maruni, Kel. Maruni, Kec. Manokwari Selatan, Kab. Manokwari, Papua Barat",
+      "status_ketaatan": "TIDAK TAAT",
+      "persiapan_spt": true,
+      "persiapan_st": true,
+      "pelaksanaan_dhp": true,
+      "pelaksanaan_no_revisi": false,
+      "pelaporan_lengkap": true,
+      "nilai_persiapan": 40,
+      "nilai_pelaksanaan": 20,
+      "nilai_pelaporan": 20,
+      "nilai_total": 80,
+      "predikat": "Baik",
+      "temuan": "Jabatan di SPT berbeda dng BAP, beberapa nama bukan Polsus",
+      "rekomendasi": "Agar Pihak Perusahaan melakukan pengurusan Perizinan Tata Ruang Laut PKKPRL, serta patuh pada PP Nomor 21 Tahun 2021 tentang Penyelenggaraan Penataan Ruang Laut.",
+      "created_at": "2026-04-22T09:00:00Z"
+    },
+    {
+      "id": "p6",
+      "tanggal": "2026-04-22",
+      "nomor_spt": "B.957/PSDKPSta.8/KP.440/IV/2026",
+      "satwas": "Satwas SDKP Manokwari",
+      "pelaku_usaha": "PT. Pulau Lemon (PULMON)",
+      "perusahaan": "PT. Pulau Lemon (PULMON)",
+      "jenis_usaha": "Penimbunan Pembuatan Dermaga/Jeti",
+      "alamat": "JL. TRIKORA TAMAN RIA MANOKWARI, Desa/Kelurahan Wosi, Kec. Manokwari Barat, Kab. Manokwari, Provinsi Papua Barat",
+      "status_ketaatan": "TIDAK TAAT",
+      "persiapan_spt": true,
+      "persiapan_st": true,
+      "pelaksanaan_dhp": true,
+      "pelaksanaan_no_revisi": true,
+      "pelaporan_lengkap": true,
+      "nilai_persiapan": 40,
+      "nilai_pelaksanaan": 40,
+      "nilai_pelaporan": 20,
+      "nilai_total": 100,
+      "predikat": "Sangat Baik",
+      "temuan": "Pembuatan penimbunan Dermaga/Jeti tanpa PKKPRL",
+      "rekomendasi": "Agar Pihak Perusahaan melakukan pengurusan Perizinan Tata Ruang Laut PKKPRL dan dilakukan penghentian sementara terhadap kegiatan dermaga sampai terpenuhi kewajiban perizinan.",
+      "created_at": "2026-04-22T14:30:00Z"
+    },
+    {
+      "id": "p7",
+      "tanggal": "2026-05-20",
+      "nomor_spt": "B.1183/PSDKPSta.8/KP.440/V/2026",
+      "satwas": "Stasiun PSDKP Biak",
+      "pelaku_usaha": "PT. Telekomunikasi Indonesia",
+      "perusahaan": "PT. Telekomunikasi Indonesia",
+      "jenis_usaha": "Aktivitas Telekomunikasi Dengan Kabel",
+      "alamat": "JL JAPATI NO.1 SADANG SERANG - COBLONG, Kota Bandung, Provinsi Jawa Barat",
+      "status_ketaatan": "TAAT",
+      "persiapan_spt": true,
+      "persiapan_st": true,
+      "pelaksanaan_dhp": true,
+      "pelaksanaan_no_revisi": true,
+      "pelaporan_lengkap": true,
+      "nilai_persiapan": 40,
+      "nilai_pelaksanaan": 40,
+      "nilai_pelaporan": 20,
+      "nilai_total": 100,
+      "predikat": "Sangat Baik",
+      "temuan": "Dokumen perizinan lengkap: PKKPRL, NIB, Izin Lingkungan (UKLUPL), Izin Prinsip Membangun (PIP). Tidak ditemukan dugaan pelanggaran.",
+      "rekomendasi": "Dalam kegiatan pengawasan Pemanfaatan ruang laut yang digunakan oleh PT. Telekomunikasi Indonesia pada tanggal 20 Mei 2026 dinyatakan taat atau patuh terhadap aturan yang telah ditentukan. Tidak ditemukan adanya dugaan pelanggaran atau perusakan pada perusahaan tersebut.",
+      "created_at": "2026-05-20T08:00:00Z"
+    },
+    {
+      "id": "p8",
+      "tanggal": "2026-05-21",
+      "nomor_spt": "B.1183/PSDKPSta.8/KP.440/V/2027",
+      "satwas": "Stasiun PSDKP Biak",
+      "pelaku_usaha": "PT. Telekomunikasi Indonesia (Secondary)",
+      "perusahaan": "PT. Telekomunikasi Indonesia",
+      "jenis_usaha": "Aktivitas Telekomunikasi Dengan Kabel",
+      "alamat": "JL JAPATI NO.1 SADANG SERANG - COBLONG, Kota Bandung, Provinsi Jawa Barat",
+      "status_ketaatan": "TAAT",
+      "persiapan_spt": true,
+      "persiapan_st": true,
+      "pelaksanaan_dhp": true,
+      "pelaksanaan_no_revisi": true,
+      "pelaporan_lengkap": true,
+      "nilai_persiapan": 40,
+      "nilai_pelaksanaan": 40,
+      "nilai_pelaporan": 20,
+      "nilai_total": 100,
+      "predikat": "Sangat Baik",
+      "temuan": "Sama dengan pengawasan 20 Mei, review dokumen perizinan lanjutan.",
+      "rekomendasi": "Pernyataan ketaatan diteruskan dan pemantauan terus dilanjutkan agar berkala.",
+      "created_at": "2026-05-21T09:00:00Z"
+    }
+  ],
+  "dokumen": [
+    {
+      "id": "d1",
+      "pemeriksaan_id": "p1",
+      "jenis_dokumen": "Persiapan",
+      "link_file": "https://drive.google.com/file/d/1NY3aZ08A_xGgCi9j4UOSfvIj_yr6IPYm/view?usp=sharing",
+      "status": "Verifikasi"
+    },
+    {
+      "id": "d2",
+      "pemeriksaan_id": "p1",
+      "jenis_dokumen": "Pelaksanaan",
+      "link_file": "https://drive.google.com/file/d/1fbvPPGYlGZ6D_vLczEMyaayAsGhfVzzb/view?usp=sharing",
+      "status": "Verifikasi"
+    },
+    {
+      "id": "d3",
+      "pemeriksaan_id": "p1",
+      "jenis_dokumen": "Pelaporan",
+      "link_file": "https://drive.google.com/file/d/1PyjM-0-ji4VsH82S6dwk9q59m8njae-y/view?usp=sharing",
+      "status": "Verifikasi"
+    },
+    {
+      "id": "d4",
+      "pemeriksaan_id": "p2",
+      "jenis_dokumen": "Persiapan",
+      "link_file": "https://drive.google.com/file/d/1256CYMocn7QeKYJpoUPgPt61e78q5J4o/view?usp=drive_link",
+      "status": "Verifikasi"
+    },
+    {
+      "id": "d5",
+      "pemeriksaan_id": "p2",
+      "jenis_dokumen": "Pelaksanaan",
+      "link_file": "https://drive.google.com/file/d/1OlG_aPI1E3PHHyM91PeCvVEQDNPTYh3O/view?usp=drive_link",
+      "status": "Verifikasi"
+    },
+    {
+      "id": "d6",
+      "pemeriksaan_id": "p3",
+      "jenis_dokumen": "Persiapan",
+      "link_file": "https://drive.google.com/file/d/1xzNaSIJ2OGd1_U2cFrQ1lmYrgj6r0_uW/view?usp=drive_link",
+      "status": "Verifikasi"
+    }
+  ],
+  "temuan": [
+    {
+      "id": "t1",
+      "pemeriksaan_id": "p1",
+      "uraian_temuan": "CV Regina Rachel menyatakan siap untuk menyampaikan laporan tahunan secara berkala.",
+      "status_tindak_lanjut": "Selesai",
+      "tanggal_update": "2026-02-15"
+    },
+    {
+      "id": "t2",
+      "pemeriksaan_id": "p2",
+      "uraian_temuan": "PT SKIP memanfaatkan ruang laut tanpa memiliki PKKPRL. Direkomendasikan supervisi lanjutan.",
+      "status_tindak_lanjut": "Selesai",
+      "tanggal_update": "2026-03-01"
+    },
+    {
+      "id": "t3",
+      "pemeriksaan_id": "p4",
+      "uraian_temuan": "Penghentian sementara terhadap usaha reklamasi PT Grace Gosyen Land Pantai Wosi sampai pemenuhan izin.",
+      "status_tindak_lanjut": "Selesai",
+      "tanggal_update": "2026-04-12"
+    },
+    {
+      "id": "t4",
+      "pemeriksaan_id": "p5",
+      "uraian_temuan": "PT Conch West Papua Cement melakukan pengurusan Perizinan Tata Ruang Laut PKKPRL.",
+      "status_tindak_lanjut": "Open",
+      "tanggal_update": "2026-04-22"
+    },
+    {
+      "id": "t5",
+      "pemeriksaan_id": "p6",
+      "uraian_temuan": "PT Pulau Lemon melakukan pengurusan Perizinan Tata Ruang Laut PKKPRL.",
+      "status_tindak_lanjut": "Open",
+      "tanggal_update": "2026-04-22"
+    }
+  ],
+  "satwas": [
+    {
+      "id": "s1",
+      "nama_satwas": "Stasiun PSDKP Biak",
+      "wilayah": "Wilayah Kerja Biak & Numfor"
+    },
+    {
+      "id": "s2",
+      "nama_satwas": "Satwas SDKP Manokwari",
+      "wilayah": "Kabupaten Manokwari"
+    },
+    {
+      "id": "s3",
+      "nama_satwas": "Satwas SDKP Jayapura",
+      "wilayah": "Kabupaten & Kota Jayapura"
+    },
+    {
+      "id": "s4",
+      "nama_satwas": "Satwas SDK Nabire",
+      "wilayah": "Kabupaten Nabire"
+    }
+  ],
+  "config": {
+    "DATA_PERSISTENCE_MODE": "local",
+    "GAS_WEB_APP_URL": "https://script.google.com/macros/s/AKfycbx7VQObqFp5-rY12PVgoJOxhzs2YXpVrAMbmRgDPfj22W6fhQUKXPsEFrrttyueDZ0PfQ/exec",
+    "PAGU_ANGGARAN": 1250000000,
+    "REALISASI_ANGGARAN": 825000000,
+    "TARGET_REALISASI": 1000000000
+  }
+}

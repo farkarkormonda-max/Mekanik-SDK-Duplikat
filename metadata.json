@@ -1,0 +1,8 @@
+{
+  "name": "MEKANIK TIMJA SDK Biak",
+  "description": "Monitoring, Evaluasi Kegiatan \u0026 Anggaran serta Nilai Indeks Kinerja\nTim Kerja Sumber Daya Kelautan (Timja SDK)\nStasiun PSDKP Biak",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
