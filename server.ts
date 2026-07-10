@@ -729,7 +729,41 @@ app.get("/api/dashboard", async (req, res) => {
       // First attempt: Get pre-computed stats directly from Google Apps Script
       const data = await proxyToGAS("getDashboard", "GET");
       if (data && typeof data === "object" && !Array.isArray(data)) {
-        return res.json({ success: true, data });
+        const paguVal = Number(configEnv.PAGU_ANGGARAN) || 0;
+        const realisasiVal = Number(configEnv.REALISASI_ANGGARAN) || 0;
+        const targetVal = Number(configEnv.TARGET_REALISASI) || 0;
+        const sisaVal = paguVal - realisasiVal;
+        const persentaseVal = paguVal > 0 ? Number(((realisasiVal / paguVal) * 100).toFixed(2)) : 0;
+        const persentaseTargetVal = targetVal > 0 ? Number(((realisasiVal / targetVal) * 100).toFixed(2)) : 0;
+
+        const targetQ1Val = configEnv.TARGET_Q1 !== undefined ? Number(configEnv.TARGET_Q1) : 250000000;
+        const targetQ2Val = configEnv.TARGET_Q2 !== undefined ? Number(configEnv.TARGET_Q2) : 250000000;
+        const targetQ3Val = configEnv.TARGET_Q3 !== undefined ? Number(configEnv.TARGET_Q3) : 250000000;
+        const targetQ4Val = configEnv.TARGET_Q4 !== undefined ? Number(configEnv.TARGET_Q4) : 250000000;
+
+        const realisasiQ1Val = configEnv.REALISASI_Q1 !== undefined ? Number(configEnv.REALISASI_Q1) : 220000000;
+        const realisasiQ2Val = configEnv.REALISASI_Q2 !== undefined ? Number(configEnv.REALISASI_Q2) : 230000000;
+        const realisasiQ3Val = configEnv.REALISASI_Q3 !== undefined ? Number(configEnv.REALISASI_Q3) : 200000000;
+        const realisasiQ4Val = configEnv.REALISASI_Q4 !== undefined ? Number(configEnv.REALISASI_Q4) : 175000000;
+
+        const enrichedData = {
+          ...data,
+          paguAnggaran: paguVal,
+          realisasiAnggaran: realisasiVal,
+          sisaAnggaran: sisaVal,
+          persentasePenyerapan: persentaseVal,
+          targetRealisasi: targetVal,
+          persentasePenyerapanTarget: persentaseTargetVal,
+          targetQ1: targetQ1Val,
+          targetQ2: targetQ2Val,
+          targetQ3: targetQ3Val,
+          targetQ4: targetQ4Val,
+          realisasiQ1: realisasiQ1Val,
+          realisasiQ2: realisasiQ2Val,
+          realisasiQ3: realisasiQ3Val,
+          realisasiQ4: realisasiQ4Val,
+        };
+        return res.json({ success: true, data: enrichedData });
       }
     } catch (e: any) {
       console.log(`GAS Sync info: Falling back to local calculation from live sheet data (Reason: ${e.message})`);

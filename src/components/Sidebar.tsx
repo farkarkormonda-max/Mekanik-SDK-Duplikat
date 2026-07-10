@@ -13,7 +13,8 @@ import {
   X,
   History,
   Chrome,
-  Volume2
+  Volume2,
+  Compass
 } from "lucide-react";
 import { User, UserRole } from "../types";
 import kepolisianKhususLogo from "../assets/images/polsus_badge_real_1782639227590.jpg";
@@ -34,6 +35,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user,
       id: "dashboard",
       label: "Dashboard Utama",
       icon: LayoutDashboard,
+      roles: ["Administrator", "Kepala Stasiun", "Verifikator", "Satwas"],
+    },
+    {
+      id: "peta",
+      label: "Peta Sebaran Giat",
+      icon: Compass,
       roles: ["Administrator", "Kepala Stasiun", "Verifikator", "Satwas"],
     },
     {

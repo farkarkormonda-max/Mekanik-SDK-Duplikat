@@ -339,10 +339,74 @@
     }
   ],
   "config": {
-    "DATA_PERSISTENCE_MODE": "local",
-    "GAS_WEB_APP_URL": "https://script.google.com/macros/s/AKfycbx7VQObqFp5-rY12PVgoJOxhzs2YXpVrAMbmRgDPfj22W6fhQUKXPsEFrrttyueDZ0PfQ/exec",
-    "PAGU_ANGGARAN": 1250000000,
-    "REALISASI_ANGGARAN": 825000000,
-    "TARGET_REALISASI": 1000000000
-  }
+    "DATA_PERSISTENCE_MODE": "sheet",
+    "GAS_WEB_APP_URL": "https://script.google.com/macros/s/AKfycbyLG91VQ8Gh0u2zoP4rgRg8TYdCsChZZ2dREh8dbt12sYfYb7P28IAXbYxPm_sWNnoSoA/exec",
+    "SPREADSHEET_ID": "1z8jCae4Vei32RWLx-RGN_wTM4Z3aZEwelp_1yeKQErA",
+    "PAGU_ANGGARAN": 321214000,
+    "REALISASI_ANGGARAN": 231672285,
+    "TARGET_REALISASI": 895417140,
+    "TARGET_Q1": 0,
+    "TARGET_Q2": 0,
+    "TARGET_Q3": 0,
+    "TARGET_Q4": 0,
+    "REALISASI_Q1": 0,
+    "REALISASI_Q2": 0,
+    "REALISASI_Q3": 0,
+    "REALISASI_Q4": 0,
+    "TARGET_SATWAS": {
+      "Stasiun PSDKP Biak": {
+        "pagu": 0,
+        "target": 0,
+        "realisasi": 0
+      },
+      "Satwas SDKP Manokwari": {
+        "pagu": 0,
+        "target": 0,
+        "realisasi": 0
+      },
+      "Satwas SDKP Jayapura": {
+        "pagu": 0,
+        "target": 0,
+        "realisasi": 0
+      },
+      "Satwas SDK Nabire": {
+        "pagu": 0,
+        "target": 0,
+        "realisasi": 0
+      }
+    }
+  },
+  "logs": [
+    {
+      "id": "log_1783049798549_175",
+      "timestamp": "2026-07-03T03:36:38.549Z",
+      "userId": "u1",
+      "username": "Administrator SDKP Biak",
+      "userRole": "Administrator",
+      "action": "CONFIG",
+      "menu": "Konfigurasi",
+      "description": "Mengubah konfigurasi persistensi data ke mode: local"
+    },
+    {
+      "id": "log_1783051797553_474",
+      "timestamp": "2026-07-03T04:09:57.553Z",
+      "userId": "u1",
+      "username": "Administrator SDKP Biak",
+      "userRole": "Administrator",
+      "action": "CONFIG",
+      "menu": "Konfigurasi",
+      "description": "Mengubah konfigurasi persistensi data ke mode: sheet"
+    },
+    {
+      "id": "log_1783052362816_920",
+      "timestamp": "2026-07-03T04:19:22.816Z",
+      "userId": "u1",
+      "username": "Administrator SDKP Biak",
+      "userRole": "Administrator",
+      "action": "CONFIG",
+      "menu": "Konfigurasi",
+      "description": "Mengubah konfigurasi persistensi data ke mode: sheet"
+    }
+  ],
+  "notes": []
 }

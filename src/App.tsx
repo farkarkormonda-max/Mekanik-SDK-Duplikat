@@ -8,11 +8,8 @@ import kepolisianKhususLogo from "./assets/images/polsus_badge_real_178263922759
 import { Sidebar } from "./components/Sidebar";
 import { Navbar } from "./components/Navbar";
 import { KPICards } from "./components/KPICards";
+import { DashboardChartsGrid } from "./components/DashboardChartsGrid";
 import { 
-  PemeriksaanBulananChart, 
-  KetaatanPieChart, 
-  NilaiSatwasChart, 
-  TrendTahunanChart,
   AnggaranSatwasStackedBarChart
 } from "./components/DashboardCharts";
 import { PemeriksaanList } from "./components/PemeriksaanList";
@@ -26,13 +23,15 @@ import { ConfigSettings } from "./components/ConfigSettings";
 import { ActivityLogList } from "./components/ActivityLogList";
 import { GoogleWorkspaceManager } from "./components/GoogleWorkspaceManager";
 import { AIVoiceAssistant } from "./components/AIVoiceAssistant";
+import { PetaSebaran } from "./components/PetaSebaran";
 import { useToast } from "./components/Toast";
+import QRCodeModal from "./components/QRCodeModal";
 
 // Direct Sheets auth service
 import { initAuth, googleSignIn, googleLogout } from "./lib/firebaseAuth";
 
 // Lucide icon helper for login
-import { Anchor, Lock, User as UserIcon, LogIn, ExternalLink, RefreshCw, Chrome, ClipboardCheck, Wallet, AlertTriangle, Download, Pin, Plus, Trash2, Edit3, Check, X, StickyNote, Volume2, Sparkles, Play, Square, Loader2, WifiOff, Cloud } from "lucide-react";
+import { Anchor, Lock, User as UserIcon, LogIn, ExternalLink, RefreshCw, Chrome, ClipboardCheck, Wallet, AlertTriangle, Download, Pin, Plus, Trash2, Edit3, Check, X, StickyNote, Volume2, Sparkles, Play, Square, Loader2, WifiOff, Cloud, Printer, QrCode } from "lucide-react";
 
 export default function App() {
   const { success, error, info, warning } = useToast();
@@ -101,6 +100,12 @@ export default function App() {
   const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
 
   const [selectedDashboardSatwas, setSelectedDashboardSatwas] = useState<string>("ALL");
+
+  // QR Code Modal States
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [qrModalUrl, setQrModalUrl] = useState("");
+  const [qrModalTitle, setQrModalTitle] = useState("");
+  const [qrModalDescription, setQrModalDescription] = useState("");
 
   // Dashboard Sticky Notes States
   const [newNoteTitle, setNewNoteTitle] = useState("");
@@ -313,6 +318,17 @@ export default function App() {
 
   // Load session or credentials if saved, and subscribe to Google Auth
   useEffect(() => {
+    // Read URL query parameters to load specific report view and Satwas filter
+    const urlParams = new URLSearchParams(window.location.search);
+    const tabParam = urlParams.get("tab");
+    const satwasParam = urlParams.get("satwas");
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+    if (satwasParam) {
+      setSelectedDashboardSatwas(satwasParam);
+    }
+
     const savedUser = localStorage.getItem("sdkp_user_session");
     if (savedUser) {
       try {
@@ -1287,6 +1303,36 @@ export default function App() {
           {activeTab === "dashboard" && filteredDashboardStats && (
             <div className="space-y-6">
               
+              {/* Kop Surat Dinas untuk Cetak Dashboard Kinerja */}
+              <div className="hidden print-only block p-6 border-b-4 border-slate-900 bg-white text-slate-900 mb-6 rounded-xs">
+                <div className="flex items-center gap-4 text-left justify-between pb-3">
+                  <div className="flex items-center gap-4">
+                    <img 
+                      src="https://upload.wikimedia.org/wikipedia/commons/f/f0/Lambang_Kementerian_Kelautan_dan_Perikanan.png" 
+                      alt="Logo KKP" 
+                      className="w-14 h-14 object-contain"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div>
+                      <h2 className="text-sm font-black uppercase tracking-wider text-slate-900 leading-none">Kementerian Kelautan dan Perikanan</h2>
+                      <h1 className="text-base font-black uppercase tracking-tight text-slate-900 mt-1 leading-tight">Direktorat Jenderal Pengawasan Sumber Daya Kelautan dan Perikanan</h1>
+                      <h2 className="text-xs font-extrabold text-sky-800 mt-0.5">Stasiun PSDKP Biak • Tahun Anggaran 2026</h2>
+                    </div>
+                  </div>
+                  <div className="text-right font-mono text-[9px] text-slate-500 font-bold space-y-0.5">
+                    <p>KLASIFIKASI: LAPORAN KINERJA DINAS</p>
+                    <p>TANGGAL CETAK: {new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                  </div>
+                </div>
+                <div className="w-full border-t border-slate-900 h-0.5 mt-1" />
+                <h3 className="text-center font-extrabold text-sm mt-4 uppercase tracking-wide">
+                  LAPORAN PENGAWASAN, KETAATAN PELAKU USAHA & KINERJA ANGGARAN TIMJA SDK
+                </h3>
+                <p className="text-center text-[10px] text-slate-500 font-bold mt-0.5 font-mono">
+                  Wilayah Kerja Terfilter: {selectedDashboardSatwas === "ALL" ? "Seluruh Wilayah Satwas" : selectedDashboardSatwas}
+                </p>
+              </div>
+
               {/* Connection Status Alerts for Dashboard */}
               {!isOnline ? (
                 <div 
@@ -1367,10 +1413,34 @@ export default function App() {
 
                   <button
                     onClick={handleDownloadCSV}
-                    className="w-full sm:w-auto px-4 py-2.5 bg-sky-500 hover:bg-sky-600 active:bg-sky-700 text-white font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-2 border border-sky-400/20 whitespace-nowrap cursor-pointer"
+                    className="w-full sm:w-auto px-4 py-2.5 bg-sky-500 hover:bg-sky-600 active:bg-sky-700 text-white font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-2 border border-sky-400/20 whitespace-nowrap cursor-pointer no-print"
                   >
                     <Download className="w-4 h-4 text-sky-100" />
                     Unduh Data
+                  </button>
+
+                  <button
+                    onClick={() => window.print()}
+                    className="w-full sm:w-auto px-4 py-2.5 bg-slate-800 hover:bg-slate-900 active:bg-slate-950 text-white font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-2 border border-slate-700 whitespace-nowrap cursor-pointer no-print"
+                    title="Cetak Laporan Dashboard Kinerja Utama"
+                  >
+                    <Printer className="w-4 h-4 text-cyan-400" />
+                    Cetak Dashboard
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const shareUrl = `${window.location.origin}${window.location.pathname}?tab=dashboard&satwas=${encodeURIComponent(selectedDashboardSatwas)}`;
+                      setQrModalUrl(shareUrl);
+                      setQrModalTitle(`Dashboard Kinerja - ${selectedDashboardSatwas === "ALL" ? "Semua Satwas" : selectedDashboardSatwas}`);
+                      setQrModalDescription(`Laporan kinerja pemantauan, ketaatan pelaku usaha, dan indeks kinerja utama Timja SDK untuk wilayah kerja ${selectedDashboardSatwas === "ALL" ? "Semua Satwas Wilayah" : selectedDashboardSatwas}.`);
+                      setQrModalOpen(true);
+                    }}
+                    className="w-full sm:w-auto px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 active:bg-cyan-800 text-white font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-2 border border-cyan-500/20 whitespace-nowrap cursor-pointer no-print"
+                    title="Buat Kode QR untuk Tampilan Ini"
+                  >
+                    <QrCode className="w-4 h-4 text-cyan-100" />
+                    QR Akses
                   </button>
                 </div>
               </div>
@@ -1620,38 +1690,16 @@ export default function App() {
 
 
               {/* Grid of Custom SVG Charts */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                
-                {/* Chart 1: Pemeriksaan per Bulan (Bar Chart) */}
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-                  <h3 className="text-sm font-bold text-slate-800">Distribusi Pemeriksaan per Bulan (Giat 2026)</h3>
-                  <p className="text-[10px] text-slate-400 mb-4 font-semibold font-sans">Aktivitas kualitatif pengawasan bulanan</p>
-                  <PemeriksaanBulananChart data={filteredDashboardStats.chartPemeriksaanBulanan} />
-                </div>
-
-                {/* Chart 2: Ketaatan Pelaku Usaha (Doughnut Pie) */}
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-                  <h3 className="text-sm font-bold text-slate-800">Persentase Tingkat Ketaatan Pelaku Usaha</h3>
-                  <p className="text-[10px] text-slate-400 mb-4 font-semibold font-sans">Perbandingan status Taat vs. Tidak Taat</p>
-                  <KetaatanPieChart data={filteredDashboardStats.chartKetaatan} />
-                </div>
-
-                {/* Chart 3: Nilai per Satwas (Progress Horizontal Performance) */}
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-                  <h3 className="text-sm font-bold text-slate-800">Skor Kepatuhan Rata-rata per Satwas Wilayah</h3>
-                  <p className="text-[10px] text-slate-400 mb-4 font-semibold font-sans">Analisa performa ketaatan di masing-masing area kerja</p>
-                  <NilaiSatwasChart data={filteredDashboardStats.chartNilaiSatwas} />
-                </div>
-
-                {/* Chart 4: Annual Trend (Area line chart) */}
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-                  <h3 className="text-sm font-bold text-slate-800">Tren Tingkat Kepatuhan Nasional (2024 - 2026)</h3>
-                  <p className="text-[10px] text-slate-400 mb-4 font-semibold font-sans">Perbandingan rata-rata evaluasi nilai tahunan</p>
-                  <TrendTahunanChart data={filteredDashboardStats.chartTrendTahunan} />
-                </div>
-
-              </div>
+              <DashboardChartsGrid stats={filteredDashboardStats} />
             </div>
+          )}
+
+          {/* TAB 1.5: PETA SEBARAN AKTIVITAS */}
+          {activeTab === "peta" && (
+            <PetaSebaran
+              records={pemeriksaan}
+              satwasList={satwasList}
+            />
           )}
 
           {/* TAB 2: MATRIK PEMERIKSAAN LEDGER */}
@@ -1725,11 +1773,42 @@ export default function App() {
               ) : (
                 filteredDashboardStats && (
                   <div className="space-y-6">
+                    
+                    {/* Kop Surat Dinas untuk Cetak Laporan Anggaran */}
+                    <div className="hidden print-only block p-6 border-b-4 border-slate-900 bg-white text-slate-900 mb-6 rounded-xs">
+                      <div className="flex items-center gap-4 text-left justify-between pb-3">
+                        <div className="flex items-center gap-4">
+                          <img 
+                            src="https://upload.wikimedia.org/wikipedia/commons/f/f0/Lambang_Kementerian_Kelautan_dan_Perikanan.png" 
+                            alt="Logo KKP" 
+                            className="w-14 h-14 object-contain"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div>
+                            <h2 className="text-sm font-black uppercase tracking-wider text-slate-900 leading-none">Kementerian Kelautan dan Perikanan</h2>
+                            <h1 className="text-base font-black uppercase tracking-tight text-slate-900 mt-1 leading-tight">Direktorat Jenderal Pengawasan Sumber Daya Kelautan dan Perikanan</h1>
+                            <h2 className="text-xs font-extrabold text-sky-800 mt-0.5">Stasiun PSDKP Biak • Bidang Anggaran & Keuangan</h2>
+                          </div>
+                        </div>
+                        <div className="text-right font-mono text-[9px] text-slate-500 font-bold space-y-0.5">
+                          <p>KLASIFIKASI: LAPORAN PENYERAPAN ANGGARAN</p>
+                          <p>TANGGAL CETAK: {new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                        </div>
+                      </div>
+                      <div className="w-full border-t border-slate-900 h-0.5 mt-1" />
+                      <h3 className="text-center font-extrabold text-sm mt-4 uppercase tracking-wide">
+                        LAPORAN REALISASI & PENYERAPAN ANGGARAN DINAS - TIMJA SDK
+                      </h3>
+                      <p className="text-center text-[10px] text-slate-500 font-bold mt-0.5 font-mono">
+                        Wilayah Kerja Terfilter: {selectedDashboardSatwas === "ALL" ? "Seluruh Wilayah Satwas" : selectedDashboardSatwas}
+                      </p>
+                    </div>
+
                     {/* Filter Satwas Wilayah untuk Anggaran */}
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white border border-slate-200 p-5 rounded-3xl shadow-xs">
                       <div className="space-y-1">
                         <h3 className="text-sm font-black text-slate-850 flex items-center gap-2">
-                          <span className="w-1.5 h-4 bg-emerald-500 rounded-xs inline-block" />
+                          <span className="w-1.5 h-4 bg-emerald-50 rounded-xs inline-block" />
                           Penyaringan Anggaran Wilayah Kerja (Satwas)
                         </h3>
                         <p className="text-[10px] text-slate-400 font-semibold font-sans">
@@ -1756,10 +1835,34 @@ export default function App() {
 
                         <button
                           onClick={handleDownloadCSV}
-                          className="w-full sm:w-auto px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-2 border border-emerald-500/20 whitespace-nowrap cursor-pointer"
+                          className="w-full sm:w-auto px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-2 border border-emerald-500/20 whitespace-nowrap cursor-pointer no-print"
                         >
                           <Download className="w-4 h-4 text-emerald-100" />
                           Unduh Data
+                        </button>
+
+                        <button
+                          onClick={() => window.print()}
+                          className="w-full sm:w-auto px-4 py-2.5 bg-slate-800 hover:bg-slate-900 active:bg-slate-950 text-white font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-2 border border-slate-700 whitespace-nowrap cursor-pointer no-print"
+                          title="Cetak Laporan Penyerapan Anggaran"
+                        >
+                          <Printer className="w-4 h-4 text-cyan-400" />
+                          Cetak Laporan
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            const shareUrl = `${window.location.origin}${window.location.pathname}?tab=anggaran&satwas=${encodeURIComponent(selectedDashboardSatwas)}`;
+                            setQrModalUrl(shareUrl);
+                            setQrModalTitle(`Laporan Anggaran - ${selectedDashboardSatwas === "ALL" ? "Semua Satwas" : selectedDashboardSatwas}`);
+                            setQrModalDescription(`Laporan realisasi penyerapan anggaran, monitoring target per triwulan (Q1 - Q4) Timja SDK untuk wilayah kerja ${selectedDashboardSatwas === "ALL" ? "Semua Satwas Wilayah" : selectedDashboardSatwas}.`);
+                            setQrModalOpen(true);
+                          }}
+                          className="w-full sm:w-auto px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 active:bg-cyan-800 text-white font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-2 border border-cyan-500/20 whitespace-nowrap cursor-pointer no-print"
+                          title="Buat Kode QR untuk Tampilan Ini"
+                        >
+                          <QrCode className="w-4 h-4 text-cyan-100" />
+                          QR Akses
                         </button>
                       </div>
                     </div>
@@ -2017,6 +2120,15 @@ export default function App() {
           isFloatingOnly={true}
         />
       )}
+
+      {/* QR CODE GENERATOR MODAL */}
+      <QRCodeModal
+        isOpen={qrModalOpen}
+        onClose={() => setQrModalOpen(false)}
+        url={qrModalUrl}
+        title={qrModalTitle}
+        description={qrModalDescription}
+      />
 
     </div>
   );

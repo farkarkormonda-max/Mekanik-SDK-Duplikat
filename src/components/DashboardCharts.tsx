@@ -644,3 +644,293 @@ export const AnggaranSatwasStackedBarChart: React.FC<AnggaranSatwasStackedBarCha
     </div>
   );
 };
+
+export const TrendBulananChart: React.FC<{ dashboardStats: any }> = ({ dashboardStats }) => {
+  const t1 = dashboardStats?.targetQ1 ?? 250000000;
+  const t2 = dashboardStats?.targetQ2 ?? 250000000;
+  const t3 = dashboardStats?.targetQ3 ?? 250000000;
+  const t4 = dashboardStats?.targetQ4 ?? 250000000;
+
+  const r1 = dashboardStats?.realisasiQ1 ?? 220000000;
+  const r2 = dashboardStats?.realisasiQ2 ?? 230000000;
+  const r3 = dashboardStats?.realisasiQ3 ?? 200000000;
+  const r4 = dashboardStats?.realisasiQ4 ?? 175000000;
+
+  // Let's distribute quarterly values to monthly values
+  // Month 1 of quarter: 30% of quarter value
+  // Month 2 of quarter: 33% of quarter value
+  // Month 3 of quarter: 37% of quarter value
+  // For target (exactly equal parts):
+  // Month 1: 33.3%, Month 2: 33.3%, Month 3: 33.4%
+  const monthsData = [
+    { name: "Jan", target: Math.round(t1 * 0.333), realisasi: Math.round(r1 * 0.30) },
+    { name: "Feb", target: Math.round(t1 * 0.333), realisasi: Math.round(r1 * 0.33) },
+    { name: "Mar", target: Math.round(t1 * 0.334), realisasi: Math.round(r1 * 0.37) },
+    { name: "Apr", target: Math.round(t2 * 0.333), realisasi: Math.round(r2 * 0.30) },
+    { name: "Mei", target: Math.round(t2 * 0.333), realisasi: Math.round(r2 * 0.33) },
+    { name: "Jun", target: Math.round(t2 * 0.334), realisasi: Math.round(r2 * 0.37) },
+    { name: "Jul", target: Math.round(t3 * 0.333), realisasi: Math.round(r3 * 0.30) },
+    { name: "Agt", target: Math.round(t3 * 0.333), realisasi: Math.round(r3 * 0.33) },
+    { name: "Sep", target: Math.round(t3 * 0.334), realisasi: Math.round(r3 * 0.37) },
+    { name: "Okt", target: Math.round(t4 * 0.333), realisasi: Math.round(r4 * 0.30) },
+    { name: "Nov", target: Math.round(t4 * 0.333), realisasi: Math.round(r4 * 0.33) },
+    { name: "Des", target: Math.round(t4 * 0.334), realisasi: Math.round(r4 * 0.37) },
+  ];
+
+  // Calculate cumulative target and realisasi
+  let cumulativeTarget = 0;
+  let cumulativeRealisasi = 0;
+
+  const cumulativeData = monthsData.map((m) => {
+    cumulativeTarget += m.target;
+    cumulativeRealisasi += m.realisasi;
+    return {
+      bulan: m.name,
+      target: cumulativeTarget,
+      realisasi: cumulativeRealisasi,
+    };
+  });
+
+  const maxVal = Math.max(...cumulativeData.map((d) => Math.max(d.target, d.realisasi)), 1);
+
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+
+  const width = 500;
+  const height = 240;
+  const paddingLeft = 65;
+  const paddingRight = 20;
+  const paddingTop = 25;
+  const paddingBottom = 35;
+
+  // Generate coordinate lists
+  const targetPoints = cumulativeData.map((d, idx) => {
+    const x = paddingLeft + (idx * (width - paddingLeft - paddingRight)) / (cumulativeData.length - 1);
+    const y = height - paddingBottom - (d.target / maxVal) * (height - paddingTop - paddingBottom);
+    return { x, y, val: d.target, label: d.bulan };
+  });
+
+  const realisasiPoints = cumulativeData.map((d, idx) => {
+    const x = paddingLeft + (idx * (width - paddingLeft - paddingRight)) / (cumulativeData.length - 1);
+    const y = height - paddingBottom - (d.realisasi / maxVal) * (height - paddingTop - paddingBottom);
+    return { x, y, val: d.realisasi, label: d.bulan };
+  });
+
+  const targetPathD = targetPoints.length > 0
+    ? `M ${targetPoints[0].x} ${targetPoints[0].y} ` + targetPoints.slice(1).map(p => `L ${p.x} ${p.y}`).join(" ")
+    : "";
+
+  const realisasiPathD = realisasiPoints.length > 0
+    ? `M ${realisasiPoints[0].x} ${realisasiPoints[0].y} ` + realisasiPoints.slice(1).map(p => `L ${p.x} ${p.y}`).join(" ")
+    : "";
+
+  const targetAreaD = targetPoints.length > 0
+    ? `${targetPathD} L ${targetPoints[targetPoints.length-1].x} ${height - paddingBottom} L ${targetPoints[0].x} ${height - paddingBottom} Z`
+    : "";
+
+  const realisasiAreaD = realisasiPoints.length > 0
+    ? `${realisasiPathD} L ${realisasiPoints[realisasiPoints.length-1].x} ${height - paddingBottom} L ${realisasiPoints[0].x} ${height - paddingBottom} Z`
+    : "";
+
+  const formatJuta = (val: number) => {
+    return `Rp ${(val / 1000000).toFixed(0)} Jt`;
+  };
+
+  const formatRupiahFull = (val: number) => {
+    return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(val);
+  };
+
+  const gridTicks = [0, 0.25, 0.5, 0.75, 1];
+
+  return (
+    <div className="w-full flex flex-col justify-between relative h-72">
+      <div className="relative flex-1">
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible">
+          <defs>
+            <linearGradient id="targetGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.4" />
+              <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
+            </linearGradient>
+            <linearGradient id="realisasiGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#10b981" stopOpacity="0.4" />
+              <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+
+          {/* Grid lines */}
+          {gridTicks.map((tick, idx) => {
+            const y = height - paddingBottom - tick * (height - paddingTop - paddingBottom);
+            return (
+              <g key={idx}>
+                <line
+                  x1={paddingLeft}
+                  y1={y}
+                  x2={width - paddingRight}
+                  y2={y}
+                  stroke="#e2e8f0"
+                  strokeWidth="0.5"
+                  strokeDasharray="4 4"
+                />
+                <text x={paddingLeft - 8} y={y + 3} textAnchor="end" className="text-[9px] fill-slate-400 font-bold font-mono">
+                  {formatJuta(maxVal * tick)}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Area Fills */}
+          {targetPoints.length > 0 && (
+            <path d={targetAreaD} fill="url(#targetGrad)" />
+          )}
+          {realisasiPoints.length > 0 && (
+            <path d={realisasiAreaD} fill="url(#realisasiGrad)" />
+          )}
+
+          {/* Lines */}
+          {targetPoints.length > 0 && (
+            <motion.path
+              d={targetPathD}
+              fill="none"
+              stroke="#0284c7"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              initial={{ pathLength: 0 }}
+              animate={{ pathLength: 1 }}
+              transition={{ duration: 1, ease: "easeInOut" }}
+            />
+          )}
+          {realisasiPoints.length > 0 && (
+            <motion.path
+              d={realisasiPathD}
+              fill="none"
+              stroke="#10b981"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              initial={{ pathLength: 0 }}
+              animate={{ pathLength: 1 }}
+              transition={{ duration: 1, ease: "easeInOut", delay: 0.2 }}
+            />
+          )}
+
+          {/* Invisible interactive zones for vertical hover tracking */}
+          {cumulativeData.map((d, idx) => {
+            const x = paddingLeft + (idx * (width - paddingLeft - paddingRight)) / (cumulativeData.length - 1);
+            const nextX = idx < cumulativeData.length - 1
+              ? paddingLeft + ((idx + 1) * (width - paddingLeft - paddingRight)) / (cumulativeData.length - 1)
+              : x;
+            const prevX = idx > 0
+              ? paddingLeft + ((idx - 1) * (width - paddingLeft - paddingRight)) / (cumulativeData.length - 1)
+              : x;
+            const triggerWidth = (nextX - prevX) / 2 || 20;
+
+            return (
+              <g key={idx}>
+                {/* Vertical hover bar indicators */}
+                {hoveredIdx === idx && (
+                  <line
+                    x1={x}
+                    y1={paddingTop}
+                    x2={x}
+                    y2={height - paddingBottom}
+                    stroke="#94a3b8"
+                    strokeWidth="1"
+                    strokeDasharray="2 2"
+                  />
+                )}
+
+                {/* Target data points */}
+                <circle
+                  cx={x}
+                  cy={targetPoints[idx].y}
+                  r={hoveredIdx === idx ? 5 : 3.5}
+                  fill="#0284c7"
+                  stroke="#fff"
+                  strokeWidth="1.5"
+                  className="transition-all duration-150"
+                />
+
+                {/* Realisasi data points */}
+                <circle
+                  cx={x}
+                  cy={realisasiPoints[idx].y}
+                  r={hoveredIdx === idx ? 5 : 3.5}
+                  fill="#10b981"
+                  stroke="#fff"
+                  strokeWidth="1.5"
+                  className="transition-all duration-150"
+                />
+
+                {/* Invisible hover area over the entire vertical strip */}
+                <rect
+                  x={x - triggerWidth}
+                  y={paddingTop}
+                  width={triggerWidth * 2}
+                  height={height - paddingTop - paddingBottom}
+                  fill="transparent"
+                  className="cursor-pointer"
+                  onMouseEnter={() => setHoveredIdx(idx)}
+                  onMouseLeave={() => setHoveredIdx(null)}
+                />
+              </g>
+            );
+          })}
+        </svg>
+
+        {/* Hover Information overlay */}
+        {hoveredIdx !== null && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="absolute -top-16 left-1/2 -translate-x-1/2 bg-slate-900/95 text-white p-2 px-3 rounded-xl shadow-lg border border-slate-800 z-10 max-w-xs text-[10px] space-y-1 backdrop-blur-xs font-sans"
+          >
+            <div className="flex justify-between items-center border-b border-slate-800 pb-1 gap-4">
+              <span className="font-extrabold text-sky-400">Kumulatif Bulan {
+                ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"][hoveredIdx]
+              }</span>
+              <span className="font-mono text-[9px] px-1.5 py-0.5 bg-slate-800 text-slate-300 rounded">
+                {cumulativeData[hoveredIdx].target > 0 ? Math.round((cumulativeData[hoveredIdx].realisasi / cumulativeData[hoveredIdx].target) * 100) : 0}% Capaian
+              </span>
+            </div>
+            <div className="flex justify-between gap-6 font-semibold">
+              <span className="text-slate-400">Target Kumulatif:</span>
+              <span className="font-mono text-white">{formatRupiahFull(cumulativeData[hoveredIdx].target)}</span>
+            </div>
+            <div className="flex justify-between gap-6 font-semibold">
+              <span className="text-slate-400">Realisasi Kumulatif:</span>
+              <span className="font-mono text-emerald-400">{formatRupiahFull(cumulativeData[hoveredIdx].realisasi)}</span>
+            </div>
+            <div className="flex justify-between gap-6 font-semibold border-t border-slate-800 pt-1">
+              <span className="text-slate-400">Sisa Anggaran:</span>
+              <span className="font-mono text-yellow-400">
+                {formatRupiahFull(Math.max(0, cumulativeData[hoveredIdx].target - cumulativeData[hoveredIdx].realisasi))}
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </div>
+
+      {/* X-axis Month Labels container */}
+      <div className="flex justify-between pl-[65px] pr-[20px] text-[9px] text-slate-500 font-mono pt-1 select-none">
+        {cumulativeData.map((d, idx) => (
+          <span
+            key={idx}
+            className={`w-6 text-center ${hoveredIdx === idx ? "font-black text-slate-800" : "font-semibold"}`}
+          >
+            {d.bulan}
+          </span>
+        ))}
+      </div>
+
+      {/* Legend below the chart */}
+      <div className="flex justify-center gap-6 text-[10px] font-bold text-slate-500 pt-2">
+        <div className="flex items-center gap-1.5">
+          <span className="w-3 h-1.5 rounded-full bg-sky-500 inline-block" />
+          <span>Target Kumulatif (Pagu)</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="w-3 h-1.5 rounded-full bg-emerald-500 inline-block" />
+          <span>Realisasi Kumulatif</span>
+        </div>
+      </div>
+    </div>
+  );
+};

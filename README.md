@@ -110,7 +110,7 @@ Kolom (Header baris pertama):
    * **Who has access**: *Anyone* (Penting agar web aplikasi luar dapat memanggil API proxy).
 9. Klik **Deploy**. Anda akan dimintai otorisasi untuk mendelegasikan izin baca/tulis Google Sheets ke script Anda, klik *Allow*.
 10. Salin **Web App URL** yang dihasilkan. Linknya akan berbentuk seperti ini:
-    `https://script.google.com/macros/s/AKfycbwtUoEQpSKXPduIeJO0lusxb_N5Gexq5u5EsORlDy2KMHOWkhGrNfUuW5YaQQuvzmNndg/exec`
+    `https://script.google.com/macros/s/AKfycbyLG91VQ8Gh0u2zoP4rgRg8TYdCsChZZ2dREh8dbt12sYfYb7P28IAXbYxPm_sWNnoSoA/exec`
 
 ---
 
@@ -120,7 +120,7 @@ Konfigurasikan variabel lingkungan berikut jika Anda men-deploy sistem secara ma
 
 ```env
 # URL target hosted dari deployment apps script Web App
-GAS_WEB_APP_URL="https://script.google.com/macros/s/AKfycbwtUoEQpSKXPduIeJO0lusxb_N5Gexq5u5EsORlDy2KMHOWkhGrNfUuW5YaQQuvzmNndg/exec"
+GAS_WEB_APP_URL="hhttps://script.google.com/macros/s/AKfycbyLG91VQ8Gh0u2zoP4rgRg8TYdCsChZZ2dREh8dbt12sYfYb7P28IAXbYxPm_sWNnoSoA/exec"
 
 # Pilihan: 'local' (menggunakan data/db.json) atau 'sheet' (sync otomatis ke Google Sheet)
 DATA_PERSISTENCE_MODE="local"
@@ -139,7 +139,7 @@ Aplikasi ini dapat dideploy secara aman dan gratis di Vercel dalam hitungan meni
 3. Klik **Add New** > **Project** di dashboard Vercel, lalu pilih repository project ini.
 4. Pada bagian **Framework Preset**, pilih **Vite** (atau diabaikan karena auto-detected).
 5. Pada bagian **Environment Variables**, masukkan:
-   * `GAS_WEB_APP_URL` = https://script.google.com/macros/s/AKfycbwtUoEQpSKXPduIeJO0lusxb_N5Gexq5u5EsORlDy2KMHOWkhGrNfUuW5YaQQuvzmNndg/exec.
+   * `GAS_WEB_APP_URL` = https://script.google.com/macros/s/AKfycbyLG91VQ8Gh0u2zoP4rgRg8TYdCsChZZ2dREh8dbt12sYfYb7P28IAXbYxPm_sWNnoSoA/exec.
    * `DATA_PERSISTENCE_MODE` = `sheet`
 6. Klik **Deploy**.
 7. Selesai! Web App profesional Stasiun SDK Biak 2026 Anda sudah online dan siap pakai.

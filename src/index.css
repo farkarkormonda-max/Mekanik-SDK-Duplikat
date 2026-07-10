@@ -42,10 +42,97 @@
   .print-only {
     display: block !important;
   }
+  
+  /* Reset document and viewport margins */
+  @page {
+    size: A4 portrait;
+    margin: 15mm 12mm 15mm 12mm;
+  }
+  
   body {
     background-color: white !important;
-    color: black !important;
+    background-image: none !important;
+    color: #0f172a !important;
     padding: 0 !important;
     margin: 0 !important;
+    width: 100% !important;
+    font-size: 11pt !important;
+  }
+
+  /* Core layout wrappers expanded to full printable width */
+  main, .flex-1, .space-y-6, .space-y-8 {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    display: block !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Reset all background-colors and shadows for crisp black-and-white or high-contrast printing */
+  .bg-white, .bg-slate-50, .bg-slate-100, .bg-slate-50\/40, .bg-sky-50, .bg-emerald-50, .bg-rose-50, .bg-amber-50, .bg-violet-50, .bg-indigo-50 {
+    background-color: #ffffff !important;
+    background-image: none !important;
+    color: #0f172a !important;
+    border-color: #e2e8f0 !important;
+    box-shadow: none !important;
+  }
+
+  /* Make sure borders are thin and clean, avoiding heavy dark block lines */
+  .border, .border-slate-200, .border-slate-150 {
+    border: 1px solid #cbd5e1 !important;
+  }
+
+  .shadow-xs, .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl, .shadow-inner {
+    box-shadow: none !important;
+  }
+
+  /* Grid overrides for print columns (KPI Cards and Charts) */
+  .grid {
+    display: grid !important;
+    gap: 12px !important;
+  }
+
+  /* Force 3-column structures (like KPI grids) on printed page width */
+  .grid-cols-1, .sm\:grid-cols-2, .lg\:grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  /* Force 2-column layout for standard dashboard charts side-by-side */
+  .lg\:grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Let full-width charts take both columns */
+  .lg\:col-span-2 {
+    grid-column: span 2 / span 2 !important;
+  }
+
+  /* Prevent elements from breaking awkwardly across pages */
+  .chart-card, .rounded-2xl, .rounded-3xl, .p-5, .p-6 {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Scale SVG and canvas visual indicators beautifully for PDF reports */
+  svg, canvas {
+    max-width: 100% !important;
+    height: auto !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Text color enhancements for high-contrast on white paper */
+  .text-slate-400, .text-slate-500, .text-slate-600 {
+    color: #475569 !important;
+  }
+  .text-slate-700, .text-slate-800, .text-slate-900, .text-slate-850 {
+    color: #0f172a !important;
+  }
+
+  /* Hide drag-and-drop handles and indicators as they make no sense on PDF */
+  .group\/chart .absolute, .group\/card .absolute {
+    display: none !important;
   }
 }

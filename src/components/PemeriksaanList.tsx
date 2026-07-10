@@ -1,4 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
+import { DateRangePicker } from "./DateRangePicker";
 import { Pemeriksaan, MasterSatwas, Temuan, Dokumen } from "../types";
 import { 
   Plus, 
@@ -49,11 +52,16 @@ export const PemeriksaanList: React.FC<PemeriksaanListProps> = ({
   const [search, setSearch] = useState("");
   const [filterSatwas, setFilterSatwas] = useState("");
   const [filterKetaatan, setFilterKetaatan] = useState("");
+  const [filterBulan, setFilterBulan] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [filterUrgentOnly, setFilterUrgentOnly] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedRecordForModal, setSelectedRecordForModal] = useState<Pemeriksaan | null>(null);
+
+  // Lazy Loading & Virtual Scroll state
+  const [visibleCount, setVisibleCount] = useState(15);
+  const loaderRef = useRef<HTMLDivElement | null>(null);
 
   // Helper to calculate document and finding follow-up deadlines and urgency status
   const getUrgencyStatus = (r: Pemeriksaan) => {
@@ -129,34 +137,300 @@ export const PemeriksaanList: React.FC<PemeriksaanListProps> = ({
     setExpandedId(expandedId === id ? null : id);
   };
 
-  // Filter records
-  const filteredRecords = records.filter((r) => {
-    const pelakuUsaha = r.pelaku_usaha || "";
-    const perusahaan = r.perusahaan || "";
-    const nomorSpt = r.nomor_spt || "";
-    const jenisUsaha = r.jenis_usaha || "";
+  // Filter records with useMemo for optimal performance
+  const filteredRecords = useMemo(() => {
+    return records.filter((r) => {
+      const pelakuUsaha = r.pelaku_usaha || "";
+      const perusahaan = r.perusahaan || "";
+      const nomorSpt = r.nomor_spt || "";
+      const jenisUsaha = r.jenis_usaha || "";
 
-    const matchSearch =
-      pelakuUsaha.toLowerCase().includes(search.toLowerCase()) ||
-      perusahaan.toLowerCase().includes(search.toLowerCase()) ||
-      nomorSpt.toLowerCase().includes(search.toLowerCase()) ||
-      jenisUsaha.toLowerCase().includes(search.toLowerCase());
+      const matchSearch =
+        pelakuUsaha.toLowerCase().includes(search.toLowerCase()) ||
+        perusahaan.toLowerCase().includes(search.toLowerCase()) ||
+        nomorSpt.toLowerCase().includes(search.toLowerCase()) ||
+        jenisUsaha.toLowerCase().includes(search.toLowerCase());
 
-    const matchSatwas = filterSatwas ? r.satwas === filterSatwas : true;
-    const matchKetaatan = filterKetaatan ? r.status_ketaatan === filterKetaatan : true;
-    const matchStartDate = startDate ? r.tanggal >= startDate : true;
-    const matchEndDate = endDate ? r.tanggal <= endDate : true;
+      const matchSatwas = filterSatwas ? r.satwas === filterSatwas : true;
+      const matchKetaatan = filterKetaatan ? r.status_ketaatan === filterKetaatan : true;
+      const matchStartDate = startDate ? r.tanggal >= startDate : true;
+      const matchEndDate = endDate ? r.tanggal <= endDate : true;
 
-    const urgency = getUrgencyStatus(r);
-    const matchUrgent = filterUrgentOnly ? urgency.isUrgent : true;
+      let matchBulan = true;
+      if (filterBulan) {
+        const recordDate = new Date(r.tanggal);
+        const recordMonth = recordDate.getMonth() + 1; // 1-12
+        matchBulan = recordMonth === parseInt(filterBulan, 10);
+      }
 
-    return matchSearch && matchSatwas && matchKetaatan && matchStartDate && matchEndDate && matchUrgent;
-  });
+      const urgency = getUrgencyStatus(r);
+      const matchUrgent = filterUrgentOnly ? urgency.isUrgent : true;
+
+      return matchSearch && matchSatwas && matchKetaatan && matchStartDate && matchEndDate && matchBulan && matchUrgent;
+    });
+  }, [records, search, filterSatwas, filterKetaatan, startDate, endDate, filterBulan, filterUrgentOnly, temuanList, documentList]);
+
+  // Reset lazy loading limit when any filter changes
+  useEffect(() => {
+    setVisibleCount(15);
+  }, [search, filterSatwas, filterKetaatan, startDate, endDate, filterBulan, filterUrgentOnly]);
+
+  // Setup dynamic infinite scrolling IntersectionObserver
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((prev) => Math.min(prev + 15, filteredRecords.length));
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentLoader = loaderRef.current;
+    if (currentLoader) {
+      observer.observe(currentLoader);
+    }
+
+    return () => {
+      if (currentLoader) {
+        observer.unobserve(currentLoader);
+      }
+    };
+  }, [filteredRecords.length]);
 
   // Role permissions checks
   const canCreate = userRole === "Administrator" || userRole === "Satwas";
   const canEdit = userRole === "Administrator" || userRole === "Satwas" || userRole === "Verifikator";
   const canDelete = userRole === "Administrator";
+
+  const handleExportPDF = () => {
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "a4"
+    });
+
+    const primaryColor: [number, number, number] = [3, 105, 161]; 
+    const secondaryColor: [number, number, number] = [71, 85, 105]; 
+    const pageWidth = doc.internal.pageSize.getWidth(); 
+    const pageHeight = doc.internal.pageSize.getHeight(); 
+    
+    // Kop Surat
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.text("KEMENTERIAN KELAUTAN DAN PERIKANAN", pageWidth / 2, 14, { align: "center" });
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+    doc.text("DIREKTORAT JENDERAL PENGAWASAN SUMBER DAYA KELAUTAN DAN PERIKANAN", pageWidth / 2, 20, { align: "center" });
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(100, 116, 139);
+    doc.text("Laporan Pemantauan, Pemeriksaan & Kepatuhan Pelaku Usaha (Matrik Ledger)", pageWidth / 2, 25, { align: "center" });
+    
+    doc.setDrawColor(203, 213, 225); 
+    doc.setLineWidth(0.8);
+    doc.line(15, 28, pageWidth - 15, 28);
+    
+    doc.setDrawColor(3, 105, 161); 
+    doc.setLineWidth(0.2);
+    doc.line(15, 29.5, pageWidth - 15, 29.5);
+
+    // Metadata
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42); 
+    doc.text("LAPORAN HASIL PENGAWASAN DAN PEMERIKSAAN", 15, 38);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(71, 85, 105); 
+    
+    const filterInfo = [
+      `Satwas: ${filterSatwas || "Semua Satwas"}`,
+      `Status: ${filterKetaatan || "Semua Status"}`,
+      `Bulan: ${filterBulan ? ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"][parseInt(filterBulan, 10) - 1] : "Semua Bulan"}`,
+      `Rentang Tanggal: ${startDate || endDate ? `${startDate || "-"} s/d ${endDate || "-"}` : "Semua Rentang Waktu"}`
+    ].join("  |  ");
+    
+    doc.text(filterInfo, 15, 43);
+    
+    const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' };
+    const dateStr = new Intl.DateTimeFormat("id-ID", options).format(new Date());
+    doc.text(`Dicetak pada: ${dateStr}`, pageWidth - 15, 38, { align: "right" });
+
+    // Mini Summary Box
+    const totalCount = filteredRecords.length;
+    const taatCount = filteredRecords.filter(r => r.status_ketaatan === "TAAT").length;
+    const tidakTaatCount = filteredRecords.filter(r => r.status_ketaatan === "TIDAK TAAT").length;
+    const avgScore = totalCount > 0 ? Math.round(filteredRecords.reduce((acc, r) => acc + r.nilai_total, 0) / totalCount) : 0;
+    
+    doc.setFillColor(248, 250, 252); 
+    doc.setDrawColor(226, 232, 240); 
+    doc.roundedRect(15, 47, pageWidth - 30, 12, 1, 1, "FD");
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    
+    doc.text("TOTAL PEMERIKSAAN", 20, 51);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(3, 105, 161);
+    doc.text(`${totalCount} Giat`, 20, 56);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text("PELAKU USAHA TAAT", 80, 51);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(16, 185, 129); 
+    doc.text(`${taatCount} (${totalCount > 0 ? Math.round((taatCount/totalCount)*100) : 0}%)`, 80, 56);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text("TIDAK TAAT", 140, 51);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(239, 68, 68); 
+    doc.text(`${tidakTaatCount} (${totalCount > 0 ? Math.round((tidakTaatCount/totalCount)*100) : 0}%)`, 140, 56);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text("RATA-RATA EVALUASI", 200, 51);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(79, 70, 229); 
+    doc.text(`${avgScore}%`, 200, 56);
+
+    const tableColumns = [
+      "No",
+      "Tanggal",
+      "Pelaku Usaha / Kapal",
+      "Satwas Wilayah",
+      "Nomor SPT",
+      "Skor",
+      "Predikat",
+      "Ketaatan"
+    ];
+
+    const tableRows = filteredRecords.map((r, index) => [
+      index + 1,
+      formatDisplayDate(r.tanggal),
+      `${r.pelaku_usaha}\n(${r.jenis_usaha})`,
+      r.satwas,
+      r.nomor_spt,
+      `${r.nilai_total}/100`,
+      r.predikat,
+      r.status_ketaatan
+    ]);
+
+    function formatDisplayDate(dateStr: string): string {
+      if (!dateStr) return "-";
+      const parts = dateStr.split("-");
+      if (parts.length !== 3) return dateStr;
+      const year = parts[0];
+      const monthIdx = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      const months = [
+        "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
+        "Jul", "Agu", "Sep", "Okt", "Nov", "Des"
+      ];
+      return `${day} ${months[monthIdx]} ${year}`;
+    }
+
+    autoTable(doc, {
+      head: [tableColumns],
+      body: tableRows,
+      startY: 63,
+      styles: {
+        fontSize: 8,
+        cellPadding: 2.5,
+        valign: "middle",
+        font: "helvetica"
+      },
+      headStyles: {
+        fillColor: primaryColor,
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        halign: "left"
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252] 
+      },
+      columnStyles: {
+        0: { cellWidth: 10, halign: "center" }, 
+        1: { cellWidth: 25 }, 
+        2: { cellWidth: 70, fontStyle: "bold" }, 
+        3: { cellWidth: 45 }, 
+        4: { cellWidth: 55 }, 
+        5: { cellWidth: 15, halign: "center" }, 
+        6: { cellWidth: 25 }, 
+        7: { cellWidth: 22, fontStyle: "bold", halign: "center" } 
+      },
+      didParseCell: (data: any) => {
+        if (data.section === "body" && data.column.index === 7) {
+          const val = data.cell.raw;
+          if (val === "TAAT") {
+            data.cell.styles.textColor = [5, 150, 105]; 
+          } else if (val === "TIDAK TAAT") {
+            data.cell.styles.textColor = [220, 38, 38]; 
+          }
+        }
+        if (data.section === "body" && data.column.index === 6) {
+          const pred = data.cell.raw;
+          if (pred === "Sangat Baik") {
+            data.cell.styles.textColor = [5, 150, 105];
+          } else if (pred === "Baik") {
+            data.cell.styles.textColor = [6, 182, 212]; 
+          } else if (pred === "Cukup") {
+            data.cell.styles.textColor = [217, 119, 6]; 
+          } else if (pred === "Perlu Perbaikan") {
+            data.cell.styles.textColor = [220, 38, 38];
+          }
+        }
+      },
+      margin: { top: 15, right: 15, bottom: 25, left: 15 },
+      didDrawPage: (data: any) => {
+        const str = "Halaman " + doc.getNumberOfPages();
+        doc.setFontSize(8);
+        doc.setTextColor(148, 163, 184); 
+        doc.text(str, pageWidth - 15, pageHeight - 10, { align: "right" });
+        doc.text("Laporan Resmi - Direktorat Jenderal PSDKP", 15, pageHeight - 10);
+      }
+    });
+
+    let finalY = (doc as any).lastAutoTable.finalY + 12;
+    
+    if (finalY > pageHeight - 40) {
+      doc.addPage();
+      finalY = 20;
+    }
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(51, 65, 85); 
+
+    const ttdDateStr = new Intl.DateTimeFormat("id-ID", { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date());
+    
+    doc.text("Petugas Verifikator / Pengawas Perikanan,", 35, finalY);
+    doc.text("Nama: ________________________", 35, finalY + 22);
+    doc.text("NIP: _________________________", 35, finalY + 26);
+
+    doc.text(`Ditetapkan di Jakarta, ${ttdDateStr}`, pageWidth - 100, finalY);
+    doc.text("Mengetahui, Kepala Stasiun / Pimpinan Wilayah", pageWidth - 100, finalY + 4);
+    doc.text("Nama: ________________________", pageWidth - 100, finalY + 22);
+    doc.text("NIP: _________________________", pageWidth - 100, finalY + 26);
+
+    const filename = `Laporan_Matrik_Pemeriksaan_${new Date().toISOString().slice(0, 10)}.pdf`;
+    doc.save(filename);
+  };
 
   return (
     <div className="space-y-6">
@@ -195,67 +469,72 @@ export const PemeriksaanList: React.FC<PemeriksaanListProps> = ({
           {/* Compliance Filter dropdown */}
           <div className="relative">
             <select
+              id="filter-ketaatan-select"
               value={filterKetaatan}
               onChange={(e) => setFilterKetaatan(e.target.value)}
+              className="px-3.5 py-2.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-sky-500/20 cursor-pointer hover:border-slate-400 transition-colors"
+            >
+              <option value="">Status Ketaatan (Semua)</option>
+              <option value="TAAT">🟢 TAAT</option>
+              <option value="TIDAK TAAT">🔴 TIDAK TAAT</option>
+            </select>
+          </div>
+
+          {/* Month Filter dropdown */}
+          <div className="relative">
+            <select
+              value={filterBulan}
+              onChange={(e) => setFilterBulan(e.target.value)}
               className="px-3.5 py-2.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-sky-500/20"
             >
-              <option value="">Status Ketaatan</option>
-              <option value="TAAT">TAAT</option>
-              <option value="TIDAK TAAT">TIDAK TAAT</option>
+              <option value="">Semua Bulan</option>
+              <option value="1">Januari</option>
+              <option value="2">Februari</option>
+              <option value="3">Maret</option>
+              <option value="4">April</option>
+              <option value="5">Mei</option>
+              <option value="6">Juni</option>
+              <option value="7">Juli</option>
+              <option value="8">Agustus</option>
+              <option value="9">September</option>
+              <option value="10">Oktober</option>
+              <option value="11">November</option>
+              <option value="12">Desember</option>
             </select>
           </div>
 
           {/* Date range filters */}
-          <div className="flex flex-wrap items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Mulai:</span>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="px-2 py-1 rounded border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500/20 bg-white text-xs font-bold text-slate-700 cursor-pointer"
-              />
-            </div>
-            
-            <div className="h-4 w-px bg-slate-200 hidden sm:block mx-1" />
-
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Selesai:</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="px-2 py-1 rounded border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-500/20 bg-white text-xs font-bold text-slate-700 cursor-pointer"
-              />
-            </div>
-
-            {(startDate || endDate) && (
-              <button
-                type="button"
-                onClick={() => {
-                  setStartDate("");
-                  setEndDate("");
-                }}
-                className="p-1 text-slate-400 hover:text-rose-600 bg-slate-100 hover:bg-rose-50 rounded transition cursor-pointer"
-                title="Reset Tanggal"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
+          <DateRangePicker
+            startDate={startDate}
+            endDate={endDate}
+            onRangeChange={(start, end) => {
+              setStartDate(start);
+              setEndDate(end);
+            }}
+          />
         </div>
 
-        {/* Create checklist button */}
-        {canCreate && (
+        {/* Action buttons (Export & Create) */}
+        <div className="flex items-center gap-2 self-start flex-wrap">
           <button
-            onClick={onAddClick}
-            className="px-4 py-2.5 bg-sky-700 hover:bg-sky-800 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-sm cursor-pointer whitespace-nowrap self-start"
+            onClick={handleExportPDF}
+            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 hover:border-slate-400 rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-sm cursor-pointer whitespace-nowrap transition-colors"
+            title="Ekspor seluruh data matrik terfilter ke berkas PDF resmi"
           >
-            <Plus className="w-4 h-4" />
-            Buat Pemeriksaan Baru
+            <Download className="w-4 h-4 text-slate-500" />
+            Ekspor Laporan PDF
           </button>
-        )}
+          
+          {canCreate && (
+            <button
+              onClick={onAddClick}
+              className="px-4 py-2.5 bg-sky-700 hover:bg-sky-800 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-sm cursor-pointer whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4" />
+              Buat Pemeriksaan Baru
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Urgent Deadline Notification Banner */}
@@ -313,7 +592,7 @@ export const PemeriksaanList: React.FC<PemeriksaanListProps> = ({
                 </tr>
               </thead>
               <tbody className="text-xs divide-y divide-slate-100 font-medium text-slate-700">
-                {filteredRecords.map((r) => {
+                {filteredRecords.slice(0, visibleCount).map((r) => {
                   const isExpanded = expandedId === r.id;
                   const dateFormatted = new Date(r.tanggal).toLocaleDateString("id-ID", {
                     day: "numeric",
@@ -555,6 +834,53 @@ export const PemeriksaanList: React.FC<PemeriksaanListProps> = ({
               </tbody>
             </table>
           </div>
+
+          {/* Sentinel for infinite scroll auto loading */}
+          {visibleCount < filteredRecords.length && (
+            <div ref={loaderRef} className="h-10 flex items-center justify-center bg-slate-50/20 py-2 border-t border-slate-100">
+              <div className="flex items-center gap-2 text-slate-400">
+                <div className="w-4 h-4 rounded-full border-2 border-sky-600/25 border-t-sky-600 animate-spin" />
+                <span className="text-[10px] font-bold text-slate-500 font-sans tracking-wide">Memuat data pemeriksaan lainnya...</span>
+              </div>
+            </div>
+          )}
+
+          {/* Lazy Loading & Progress Footer */}
+          <div className="bg-slate-50 px-6 py-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex flex-col gap-1.5 w-full sm:w-auto">
+              <div className="flex items-center justify-between sm:justify-start gap-2.5">
+                <span className="text-xs font-semibold text-slate-500">
+                  Menampilkan <strong className="text-slate-800 font-bold">{Math.min(visibleCount, filteredRecords.length)}</strong> dari <strong className="text-slate-900 font-extrabold">{filteredRecords.length}</strong> pemeriksaan
+                </span>
+                {visibleCount < filteredRecords.length && (
+                  <span className="px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 text-[9px] font-black tracking-wide uppercase border border-sky-100">
+                    Lazy Loading Aktif
+                  </span>
+                )}
+              </div>
+              
+              {/* Sleek progress indicator */}
+              <div className="w-full sm:w-56 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-sky-600 rounded-full transition-all duration-300" 
+                  style={{ width: `${Math.min(100, (Math.min(visibleCount, filteredRecords.length) / filteredRecords.length) * 100)}%` }}
+                />
+              </div>
+            </div>
+
+            {visibleCount < filteredRecords.length && (
+              <div className="w-full sm:w-auto flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setVisibleCount((prev) => Math.min(prev + 15, filteredRecords.length))}
+                  className="w-full sm:w-auto px-4 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-3xs"
+                >
+                  Tampilkan Lebih Banyak
+                </button>
+              </div>
+            )}
+          </div>
+
         </div>
       )}
 
