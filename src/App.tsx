@@ -25,7 +25,6 @@ import { ConfigSettings } from "./components/ConfigSettings";
 import { ActivityLogList } from "./components/ActivityLogList";
 import { GoogleWorkspaceManager } from "./components/GoogleWorkspaceManager";
 import { AIVoiceAssistant } from "./components/AIVoiceAssistant";
-import { PetaSebaran } from "./components/PetaSebaran";
 import { useToast } from "./components/Toast";
 import QRCodeModal from "./components/QRCodeModal";
 import { AlertRulesModal } from "./components/AlertRulesModal";
@@ -2918,21 +2917,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {/* TAB 1.5: PETA SEBARAN AKTIVITAS */}
-          {activeTab === "peta" && (
-            <motion.div
-              key="peta"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
-            >
-              <PetaSebaran
-                records={pemeriksaan}
-                satwasList={satwasList}
-              />
-            </motion.div>
-          )}
+
 
           {/* TAB 2: MATRIK PEMERIKSAAN LEDGER */}
           {activeTab === "pemeriksaan" && (

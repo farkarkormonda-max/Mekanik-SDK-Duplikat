@@ -38,12 +38,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user,
       roles: ["Administrator", "Kepala Stasiun", "Verifikator", "Satwas"],
     },
     {
-      id: "peta",
-      label: "Peta Sebaran Giat",
-      icon: Compass,
-      roles: ["Administrator", "Kepala Stasiun", "Verifikator", "Satwas"],
-    },
-    {
       id: "pemeriksaan",
       label: "Matrik Pemeriksaan",
       icon: ClipboardCheck,
