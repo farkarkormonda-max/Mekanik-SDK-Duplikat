@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import ExcelJS from "exceljs";
 import { DateRangePicker } from "./DateRangePicker";
 import { Pemeriksaan, MasterSatwas, Temuan, Dokumen } from "../types";
 import { 
@@ -35,6 +36,7 @@ interface PemeriksaanListProps {
   onDeleteClick: (id: string, name: string) => void;
   onUploadDocClick: (record: Pemeriksaan) => void;
   onCreateTemuanClick: (record: Pemeriksaan) => void;
+  onDeleteDoc?: (id: string) => Promise<void>;
 }
 
 export const PemeriksaanList: React.FC<PemeriksaanListProps> = ({
@@ -48,6 +50,7 @@ export const PemeriksaanList: React.FC<PemeriksaanListProps> = ({
   onDeleteClick,
   onUploadDocClick,
   onCreateTemuanClick,
+  onDeleteDoc,
 }) => {
   const [search, setSearch] = useState("");
   const [filterSatwas, setFilterSatwas] = useState("");
@@ -202,6 +205,345 @@ export const PemeriksaanList: React.FC<PemeriksaanListProps> = ({
   const canCreate = userRole === "Administrator" || userRole === "Satwas";
   const canEdit = userRole === "Administrator" || userRole === "Satwas" || userRole === "Verifikator";
   const canDelete = userRole === "Administrator";
+
+  const handleExportExcel = async () => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Matrik Pemeriksaan");
+
+      // Set column properties
+      worksheet.columns = [
+        { key: "no", width: 6 },
+        { key: "tanggal", width: 14 },
+        { key: "pelaku_usaha", width: 28 },
+        { key: "perusahaan", width: 28 },
+        { key: "jenis_usaha", width: 18 },
+        { key: "satwas", width: 20 },
+        { key: "nomor_spt", width: 25 },
+        { key: "nilai_persiapan", width: 12 },
+        { key: "nilai_pelaksanaan", width: 12 },
+        { key: "nilai_pelaporan", width: 12 },
+        { key: "nilai_total", width: 12 },
+        { key: "predikat", width: 18 },
+        { key: "ketaatan", width: 16 },
+        { key: "temuan", width: 35 },
+        { key: "rekomendasi", width: 35 }
+      ];
+
+      // Merge header rows for Kop Surat
+      worksheet.addRow([]);
+
+      // Row 2: Ministry
+      worksheet.mergeCells("A2:O2");
+      const r2Cell = worksheet.getCell("A2");
+      r2Cell.value = "KEMENTERIAN KELAUTAN DAN PERIKANAN";
+      r2Cell.font = { name: "Arial", size: 12, bold: true, color: { argb: "FF0F172A" } };
+      r2Cell.alignment = { horizontal: "center", vertical: "middle" };
+
+      // Row 3: Directorate
+      worksheet.mergeCells("A3:O3");
+      const r3Cell = worksheet.getCell("A3");
+      r3Cell.value = "DIREKTORAT JENDERAL PENGAWASAN SUMBER DAYA KELAUTAN DAN PERIKANAN";
+      r3Cell.font = { name: "Arial", size: 9.5, bold: true, color: { argb: "FF334155" } };
+      r3Cell.alignment = { horizontal: "center", vertical: "middle" };
+
+      // Row 4: Biak Station
+      worksheet.mergeCells("A4:O4");
+      const r4Cell = worksheet.getCell("A4");
+      r4Cell.value = "STASIUN PENGAWASAN SUMBER DAYA KELAUTAN DAN PERIKANAN BIAK";
+      r4Cell.font = { name: "Arial", size: 10.5, bold: true, color: { argb: "FF0369A1" } };
+      r4Cell.alignment = { horizontal: "center", vertical: "middle" };
+
+      // Row 5: Address
+      worksheet.mergeCells("A5:O5");
+      const r5Cell = worksheet.getCell("A5");
+      r5Cell.value = "Sorido, Distrik Biak Kota, Kabupaten Biak Numfor, Papua • Email: stasiun.biak@kkp.go.id";
+      r5Cell.font = { name: "Arial", size: 8, italic: true, color: { argb: "FF64748B" } };
+      r5Cell.alignment = { horizontal: "center", vertical: "middle" };
+
+      // Double line style border using cell properties
+      worksheet.getRow(5).border = {
+        bottom: { style: "double", color: { argb: "FF0369A1" } }
+      };
+
+      worksheet.addRow([]); // Blank row
+
+      // Title Row
+      worksheet.mergeCells("A7:O7");
+      const titleCell = worksheet.getCell("A7");
+      titleCell.value = "LAPORAN HASIL MONITORING, PENGAWASAN DAN PEMERIKSAAN KETAATAN";
+      titleCell.font = { name: "Arial", size: 11.5, bold: true, color: { argb: "FF0F172A" } };
+      titleCell.alignment = { horizontal: "center", vertical: "middle" };
+
+      worksheet.mergeCells("A8:O8");
+      const subtitleCell = worksheet.getCell("A8");
+      subtitleCell.value = "TIM KERJA SUMBER DAYA KELAUTAN (TIMJA SDK) • TAHUN 2026";
+      subtitleCell.font = { name: "Arial", size: 9.5, bold: true, color: { argb: "FF475569" } };
+      subtitleCell.alignment = { horizontal: "center", vertical: "middle" };
+
+      worksheet.addRow([]); // Blank row
+
+      // Metadata block - Filter & Date
+      worksheet.getCell("A10").value = "Rentang Filter:";
+      worksheet.getCell("A10").font = { name: "Arial", size: 8.5, bold: true, color: { argb: "FF475569" } };
+      
+      const filterSatwasStr = filterSatwas || "Semua Satwas";
+      const filterKetaatanStr = filterKetaatan || "Semua Status";
+      const filterBulanStr = filterBulan ? ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"][parseInt(filterBulan, 10) - 1] : "Semua Bulan";
+      const filterRangeStr = startDate || endDate ? `${startDate || "-"} s/d ${endDate || "-"}` : "Semua Waktu";
+
+      worksheet.getCell("B10").value = `Satwas: ${filterSatwasStr}  |  Status: ${filterKetaatanStr}  |  Bulan: ${filterBulanStr}  |  Rentang: ${filterRangeStr}`;
+      worksheet.getCell("B10").font = { name: "Arial", size: 8.5, color: { argb: "FF0F172A" } };
+      worksheet.mergeCells("B10:I10");
+
+      worksheet.getCell("L10").value = "Tanggal Cetak:";
+      worksheet.getCell("L10").font = { name: "Arial", size: 8.5, bold: true, color: { argb: "FF475569" } };
+      worksheet.getCell("L10").alignment = { horizontal: "right" };
+
+      const opt: Intl.DateTimeFormatOptions = { day: "numeric", month: "long", year: "numeric" };
+      const printDateStr = new Intl.DateTimeFormat("id-ID", opt).format(new Date());
+      worksheet.getCell("M10").value = printDateStr;
+      worksheet.getCell("M10").font = { name: "Arial", size: 8.5, bold: true, color: { argb: "FF0F172A" } };
+      worksheet.mergeCells("M10:O10");
+
+      worksheet.addRow([]); // Blank row
+
+      // Summary KPI Row
+      worksheet.mergeCells("A12:C12");
+      const sumTotalLabel = worksheet.getCell("A12");
+      sumTotalLabel.value = `TOTAL PEMERIKSAAN: ${filteredRecords.length} GIAT`;
+      sumTotalLabel.font = { name: "Arial", size: 8.5, bold: true, color: { argb: "FF0369A1" } };
+      sumTotalLabel.alignment = { horizontal: "center", vertical: "middle" };
+      sumTotalLabel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF0F9FF" } };
+
+      const taatCount = filteredRecords.filter(r => r.status_ketaatan === "TAAT").length;
+      worksheet.mergeCells("E12:G12");
+      const sumTaatLabel = worksheet.getCell("E12");
+      sumTaatLabel.value = `TAAT: ${taatCount} (${filteredRecords.length > 0 ? Math.round((taatCount/filteredRecords.length)*100) : 0}%)`;
+      sumTaatLabel.font = { name: "Arial", size: 8.5, bold: true, color: { argb: "FF059669" } };
+      sumTaatLabel.alignment = { horizontal: "center", vertical: "middle" };
+      sumTaatLabel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFECFDF5" } };
+
+      const tidakTaatCount = filteredRecords.filter(r => r.status_ketaatan === "TIDAK TAAT").length;
+      worksheet.mergeCells("I12:K12");
+      const sumTidakTaatLabel = worksheet.getCell("I12");
+      sumTidakTaatLabel.value = `MELANGGAR: ${tidakTaatCount} (${filteredRecords.length > 0 ? Math.round((tidakTaatCount/filteredRecords.length)*100) : 0}%)`;
+      sumTidakTaatLabel.font = { name: "Arial", size: 8.5, bold: true, color: { argb: "FFDC2626" } };
+      sumTidakTaatLabel.alignment = { horizontal: "center", vertical: "middle" };
+      sumTidakTaatLabel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF2F2" } };
+
+      const avgScore = filteredRecords.length > 0 ? Math.round(filteredRecords.reduce((acc, r) => acc + r.nilai_total, 0) / filteredRecords.length) : 0;
+      worksheet.mergeCells("M12:O12");
+      const sumAvgLabel = worksheet.getCell("M12");
+      sumAvgLabel.value = `RATA-RATA NILAI: ${avgScore}%`;
+      sumAvgLabel.font = { name: "Arial", size: 8.5, bold: true, color: { argb: "FF4F46E5" } };
+      sumAvgLabel.alignment = { horizontal: "center", vertical: "middle" };
+      sumAvgLabel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEEF2FF" } };
+
+      // Set border for KPI row
+      ["A12", "E12", "I12", "M12"].forEach(cellName => {
+        const c = worksheet.getCell(cellName);
+        c.border = {
+          top: { style: "thin", color: { argb: "FFCBD5E1" } },
+          bottom: { style: "thin", color: { argb: "FFCBD5E1" } },
+          left: { style: "thin", color: { argb: "FFCBD5E1" } },
+          right: { style: "thin", color: { argb: "FFCBD5E1" } }
+        };
+      });
+
+      worksheet.addRow([]); // Blank row
+
+      // Add Headers Row at 14
+      const headers = [
+        "No",
+        "Tanggal",
+        "Pelaku Usaha / Kapal",
+        "Perusahaan",
+        "Jenis Usaha",
+        "Satwas Wilayah",
+        "Nomor SPT",
+        "Skor Persiapan",
+        "Skor Pelaksanaan",
+        "Skor Pelaporan",
+        "Skor Total",
+        "Predikat",
+        "Status Ketaatan",
+        "Temuan / Catatan",
+        "Rekomendasi Tindak Lanjut"
+      ];
+
+      const headerRow = worksheet.addRow(headers);
+      headerRow.height = 28;
+
+      headerRow.eachCell((cell) => {
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FF0F172A" } // Dark Slate for premium contrast
+        };
+        cell.font = {
+          name: "Arial",
+          bold: true,
+          color: { argb: "FFFFFFFF" },
+          size: 9.5
+        };
+        cell.alignment = {
+          vertical: "middle",
+          horizontal: "center",
+          wrapText: true
+        };
+        cell.border = {
+          top: { style: "thin", color: { argb: "FF0F172A" } },
+          bottom: { style: "medium", color: { argb: "FF0369A1" } },
+          left: { style: "thin", color: { argb: "FF334155" } },
+          right: { style: "thin", color: { argb: "FF334155" } }
+        };
+      });
+
+      // Add Data Rows
+      filteredRecords.forEach((r, idx) => {
+        const rowData = [
+          idx + 1,
+          r.tanggal,
+          r.pelaku_usaha,
+          r.perusahaan || "-",
+          r.jenis_usaha,
+          r.satwas,
+          r.nomor_spt,
+          r.nilai_persiapan,
+          r.nilai_pelaksanaan,
+          r.nilai_pelaporan,
+          r.nilai_total,
+          r.predikat,
+          r.status_ketaatan,
+          r.temuan || "-",
+          r.rekomendasi || "-"
+        ];
+
+        const row = worksheet.addRow(rowData);
+        row.height = 22;
+
+        const isEven = idx % 2 === 1;
+        row.eachCell((cell, colNum) => {
+          cell.font = {
+            name: "Arial",
+            size: 9,
+            color: { argb: "FF334155" }
+          };
+
+          if ([1, 2, 8, 9, 10, 11, 12, 13].includes(colNum)) {
+            cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+          } else {
+            cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+          }
+
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: isEven ? "FFF8FAFC" : "FFFFFFFF" }
+          };
+
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFECEFF1" } },
+            bottom: { style: "thin", color: { argb: "FFECEFF1" } },
+            left: { style: "thin", color: { argb: "FFECEFF1" } },
+            right: { style: "thin", color: { argb: "FFECEFF1" } }
+          };
+
+          if (colNum === 1) {
+            cell.font = { name: "Arial", size: 9, bold: true, color: { argb: "FF64748B" } };
+          }
+
+          if (colNum === 2) {
+            cell.font = { name: "Arial", size: 9, bold: true, color: { argb: "FF475569" } };
+          }
+
+          if (colNum === 11) {
+            cell.font = { name: "Arial", size: 9.5, bold: true, color: { argb: "FF0F172A" } };
+          }
+
+          if (colNum === 12) {
+            if (cell.value === "Sangat Baik") {
+              cell.font = { name: "Arial", size: 9, bold: true, color: { argb: "FF047857" } };
+            } else if (cell.value === "Baik") {
+              cell.font = { name: "Arial", size: 9, bold: true, color: { argb: "FF0369A1" } };
+            } else if (cell.value === "Cukup") {
+              cell.font = { name: "Arial", size: 9, bold: true, color: { argb: "FFB45309" } };
+            } else {
+              cell.font = { name: "Arial", size: 9, bold: true, color: { argb: "FFB91C1C" } };
+            }
+          }
+
+          if (colNum === 13) {
+            const val = cell.value as string;
+            if (val === "TAAT") {
+              cell.fill = {
+                type: "pattern",
+                pattern: "solid",
+                fgColor: { argb: "FFD1FAE5" }
+              };
+              cell.font = {
+                name: "Arial",
+                size: 9,
+                bold: true,
+                color: { argb: "FF065F46" }
+              };
+            } else if (val === "TIDAK TAAT") {
+              cell.fill = {
+                type: "pattern",
+                pattern: "solid",
+                fgColor: { argb: "FFFEE2E2" }
+              };
+              cell.font = {
+                name: "Arial",
+                size: 9,
+                bold: true,
+                color: { argb: "FF991B1B" }
+              };
+            }
+          }
+        });
+      });
+
+      // Add signatures block
+      const signatureStartRow = worksheet.lastRow ? worksheet.lastRow.number + 3 : 20;
+
+      worksheet.getCell(`C${signatureStartRow}`).value = "Petugas Verifikator / Pengawas Perikanan,";
+      worksheet.getCell(`C${signatureStartRow}`).font = { name: "Arial", size: 9.5, italic: true, color: { argb: "FF334155" } };
+
+      worksheet.getCell(`C${signatureStartRow + 4}`).value = "Nama: ________________________";
+      worksheet.getCell(`C${signatureStartRow + 4}`).font = { name: "Arial", size: 9.5, color: { argb: "FF475569" } };
+      worksheet.getCell(`C${signatureStartRow + 5}`).value = "NIP: _________________________";
+      worksheet.getCell(`C${signatureStartRow + 5}`).font = { name: "Arial", size: 9.5, color: { argb: "FF475569" } };
+
+      worksheet.getCell(`M${signatureStartRow}`).value = `Ditetapkan di Biak, ${printDateStr}`;
+      worksheet.getCell(`M${signatureStartRow}`).font = { name: "Arial", size: 9.5, color: { argb: "FF334155" } };
+      worksheet.mergeCells(`M${signatureStartRow}:O${signatureStartRow}`);
+
+      worksheet.getCell(`M${signatureStartRow + 1}`).value = "Mengetahui, Kepala Stasiun PSDKP Biak";
+      worksheet.getCell(`M${signatureStartRow + 1}`).font = { name: "Arial", size: 9.5, bold: true, color: { argb: "FF0F172A" } };
+      worksheet.mergeCells(`M${signatureStartRow + 1}:O${signatureStartRow + 1}`);
+
+      worksheet.getCell(`M${signatureStartRow + 5}`).value = "Nama: ________________________";
+      worksheet.getCell(`M${signatureStartRow + 5}`).font = { name: "Arial", size: 9.5, color: { argb: "FF475569" } };
+      worksheet.mergeCells(`M${signatureStartRow + 5}:O${signatureStartRow + 5}`);
+      worksheet.getCell(`M${signatureStartRow + 6}`).value = "NIP: _________________________";
+      worksheet.getCell(`M${signatureStartRow + 6}`).font = { name: "Arial", size: 9.5, color: { argb: "FF475569" } };
+      worksheet.mergeCells(`M${signatureStartRow + 6}:O${signatureStartRow + 6}`);
+
+      // Generate buffer and trigger download
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `Matrik_Ledger_Pemeriksaan_PSDKP_Biak_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      anchor.click();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("Gagal membuat Excel:", e);
+    }
+  };
 
   const handleExportPDF = () => {
     const doc = new jsPDF({
@@ -524,6 +866,15 @@ export const PemeriksaanList: React.FC<PemeriksaanListProps> = ({
             <Download className="w-4 h-4 text-slate-500" />
             Ekspor Laporan PDF
           </button>
+
+          <button
+            onClick={handleExportExcel}
+            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 hover:border-slate-400 rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-sm cursor-pointer whitespace-nowrap transition-colors"
+            title="Ekspor seluruh data matrik terfilter ke berkas Excel (.xlsx)"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            Ekspor Laporan Excel
+          </button>
           
           {canCreate && (
             <button
@@ -741,7 +1092,7 @@ export const PemeriksaanList: React.FC<PemeriksaanListProps> = ({
                             {canDelete && (
                               <button
                                 onClick={() => onDeleteClick(r.id, r.pelaku_usaha)}
-                                title="Hapus Berkas"
+                                title="Hapus Pemeriksaan"
                                 className="p-1 px-1.5 text-slate-400 hover:text-red-650 hover:bg-red-50 rounded cursor-pointer"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -1080,17 +1431,37 @@ export const PemeriksaanList: React.FC<PemeriksaanListProps> = ({
                               </span>
                             </div>
                           </div>
-                          {doc.link_file && (
-                            <a 
-                              href={doc.link_file}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="flex items-center gap-1 text-[10px] font-black text-sky-700 hover:text-sky-800 hover:underline px-2.5 py-1 bg-sky-50 rounded"
-                            >
-                              <span>Buka Link</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          )}
+                          <div className="flex items-center gap-1.5">
+                            {doc.link_file && (
+                              <a 
+                                href={doc.link_file}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex items-center gap-1 text-[10px] font-black text-sky-700 hover:text-sky-800 hover:underline px-2.5 py-1 bg-sky-50 rounded"
+                              >
+                                <span>Buka Link</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                            {(userRole === "Administrator" || userRole === "Satwas") && onDeleteDoc && (
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (confirm(`Apakah Anda yakin ingin menghapus berkas ${doc.jenis_dokumen}?`)) {
+                                    try {
+                                      await onDeleteDoc(doc.id);
+                                    } catch (err: any) {
+                                      alert("Gagal menghapus berkas: " + err.message);
+                                    }
+                                  }
+                                }}
+                                className="p-1 text-slate-400 hover:text-rose-650 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                                title="Hapus Berkas"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>

@@ -75,6 +75,7 @@ export interface DashboardStats {
   chartKetaatan: { name: string; value: number }[];
   chartNilaiSatwas: { satwas: string; rataRata: number; jumlah: number }[];
   chartTrendTahunan: { tahun: string; rataRata: number }[];
+  chartKetaatanTrend?: { bulan: string; tahunIni: number; tahunLalu: number }[];
   paguAnggaran?: number;
   realisasiAnggaran?: number;
   sisaAnggaran?: number;

@@ -27,6 +27,7 @@ interface DokumenListProps {
   onCreateDoc: (doc: Partial<Dokumen>) => Promise<void>;
   onVerifyDoc: (id: string, status: "Verifikasi" | "Ditolak") => Promise<void>;
   onDeleteDoc: (id: string) => Promise<void>;
+  onBulkVerifyDocs?: (ids: string[]) => Promise<void>;
 }
 
 export const DokumenList: React.FC<DokumenListProps> = ({
@@ -36,6 +37,7 @@ export const DokumenList: React.FC<DokumenListProps> = ({
   onCreateDoc,
   onVerifyDoc,
   onDeleteDoc,
+  onBulkVerifyDocs,
 }) => {
   const { warning } = useToast();
   const [search, setSearch] = useState("");
@@ -189,6 +191,29 @@ export const DokumenList: React.FC<DokumenListProps> = ({
     }
   };
 
+  const [isBulkVerifying, setIsBulkVerifying] = useState(false);
+  const unverifiedDocs = filteredDocs.filter((doc) => doc.status === "Belum Verifikasi");
+
+  const handleBulkVerify = async () => {
+    if (unverifiedDocs.length === 0) return;
+    if (confirm(`Apakah Anda yakin ingin melakukan verifikasi massal terhadap ${unverifiedDocs.length} berkas yang memiliki status 'Belum Verifikasi'?`)) {
+      setIsBulkVerifying(true);
+      try {
+        if (onBulkVerifyDocs) {
+          await onBulkVerifyDocs(unverifiedDocs.map(d => d.id));
+        } else {
+          for (const doc of unverifiedDocs) {
+            await onVerifyDoc(doc.id, "Verifikasi");
+          }
+        }
+      } catch (err: any) {
+        alert("Gagal melakukan verifikasi massal: " + err.message);
+      } finally {
+        setIsBulkVerifying(false);
+      }
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* List controls */}
@@ -264,16 +289,33 @@ export const DokumenList: React.FC<DokumenListProps> = ({
           </div>
         </div>
 
-        {/* Add document link toggle */}
-        {canUpload && (
-          <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="px-4 py-2.5 bg-sky-700 hover:bg-sky-800 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-sm self-start whitespace-nowrap"
-          >
-            <Plus className="w-4 h-4" />
-            Upload Link Drive
-          </button>
-        )}
+        {/* Actions bar containing Bulk Verification and Upload buttons */}
+        <div className="flex flex-wrap items-center gap-2.5 self-start shrink-0">
+          {isVerifikator && unverifiedDocs.length > 0 && (
+            <button
+              onClick={handleBulkVerify}
+              disabled={isBulkVerifying}
+              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-sm whitespace-nowrap transition-colors"
+            >
+              {isBulkVerifying ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <CheckCircle className="w-4 h-4" />
+              )}
+              Verifikasi Massal ({unverifiedDocs.length} Berkas)
+            </button>
+          )}
+
+          {canUpload && (
+            <button
+              onClick={() => setShowAddForm(!showAddForm)}
+              className="px-4 py-2.5 bg-sky-700 hover:bg-sky-800 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-sm whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4" />
+              Upload Link Drive
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Add Drive Link Form Panel */}

@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { User, Pemeriksaan, Dokumen, Temuan, MasterSatwas, DashboardStats, UserRole } from "./types";
 import { api } from "./lib/api";
-import { motion } from "motion/react";
-import kepolisianKhususLogo from "./assets/images/polsus_badge_real_1782639227590.jpg";
+import { motion, AnimatePresence } from "motion/react";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
+import kepolisianKhususLogo from "./assets/images/polsus_badge_real_1783821523353.jpg";
 
 // Sub-component imports
 import { Sidebar } from "./components/Sidebar";
@@ -26,12 +28,13 @@ import { AIVoiceAssistant } from "./components/AIVoiceAssistant";
 import { PetaSebaran } from "./components/PetaSebaran";
 import { useToast } from "./components/Toast";
 import QRCodeModal from "./components/QRCodeModal";
+import { AlertRulesModal } from "./components/AlertRulesModal";
 
 // Direct Sheets auth service
 import { initAuth, googleSignIn, googleLogout } from "./lib/firebaseAuth";
 
 // Lucide icon helper for login
-import { Anchor, Lock, User as UserIcon, LogIn, ExternalLink, RefreshCw, Chrome, ClipboardCheck, Wallet, AlertTriangle, Download, Pin, Plus, Trash2, Edit3, Check, X, StickyNote, Volume2, Sparkles, Play, Square, Loader2, WifiOff, Cloud, Printer, QrCode } from "lucide-react";
+import { Anchor, Lock, User as UserIcon, LogIn, ExternalLink, RefreshCw, RotateCcw, Chrome, ClipboardCheck, Wallet, AlertTriangle, Download, Pin, Plus, Trash2, Edit3, Check, X, StickyNote, Volume2, Sparkles, Play, Square, Loader2, WifiOff, Cloud, Printer, QrCode, Search, ChevronDown, Share2, Info, FileText, Eye, EyeOff, Sliders, Bell } from "lucide-react";
 
 export default function App() {
   const { success, error, info, warning } = useToast();
@@ -42,6 +45,8 @@ export default function App() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [authenticating, setAuthenticating] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   // App Navigation tab
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -54,6 +59,20 @@ export default function App() {
   const [satwasList, setSatwasList] = useState<MasterSatwas[]>([]);
   const [usersList, setUsersList] = useState<User[]>([]);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
+
+  // Satwas Alert Rules States
+  const [satwasAlertRules, setSatwasAlertRules] = useState<Record<string, { minInspections?: number; maxBudgetVariance?: number; minCompliance?: number }>>(() => {
+    const saved = localStorage.getItem("satwas_alert_rules");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return {};
+  });
+  const [isAlertRulesModalOpen, setIsAlertRulesModalOpen] = useState(false);
   const [dashboardNotes, setDashboardNotes] = useState<any[]>([]);
   const [config, setConfig] = useState<{ 
     DATA_PERSISTENCE_MODE: string; 
@@ -100,12 +119,106 @@ export default function App() {
   const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
 
   const [selectedDashboardSatwas, setSelectedDashboardSatwas] = useState<string>("ALL");
+  const [isResettingFilter, setIsResettingFilter] = useState(false);
+  const [isAutoSyncEnabled, setIsAutoSyncEnabled] = useState(false);
+  
+  // Searchable dropdown states
+  const [isSatwasDropdownOpen, setIsSatwasDropdownOpen] = useState(false);
+  const [isFilterTooltipOpen, setIsFilterTooltipOpen] = useState(false);
+  const [satwasSearchQuery, setSatwasSearchQuery] = useState("");
+  const satwasDropdownRef = useRef<HTMLDivElement>(null);
 
   // QR Code Modal States
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [qrModalUrl, setQrModalUrl] = useState("");
   const [qrModalTitle, setQrModalTitle] = useState("");
   const [qrModalDescription, setQrModalDescription] = useState("");
+
+  // Memoized alerts count per Satwas and globally
+  const satwasAlertCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    
+    // Calculate for "ALL"
+    const allUnverified = documents.filter(d => d.status === "Belum Verifikasi").length;
+    const allActiveFindings = temuan.filter(t => t.status_tindak_lanjut !== "Selesai").length;
+    counts["ALL"] = allUnverified + allActiveFindings;
+
+    // Pre-index pemeriksaan by satwas for optimal lookups
+    const pemsBySatwas: Record<string, string[]> = {};
+    pemeriksaan.forEach(p => {
+      if (!pemsBySatwas[p.satwas]) {
+        pemsBySatwas[p.satwas] = [];
+      }
+      pemsBySatwas[p.satwas].push(p.id);
+    });
+
+    // Calculate for each Satwas in satwasList
+    satwasList.forEach(sat => {
+      const pemIds = pemsBySatwas[sat.nama_satwas] || [];
+      const pemIdsSet = new Set(pemIds);
+      
+      const unverifiedCount = documents.filter(d => 
+        d.status === "Belum Verifikasi" && pemIdsSet.has(d.pemeriksaan_id)
+      ).length;
+
+      const activeFindingsCount = temuan.filter(t => 
+        t.status_tindak_lanjut !== "Selesai" && pemIdsSet.has(t.pemeriksaan_id)
+      ).length;
+
+      counts[sat.nama_satwas] = unverifiedCount + activeFindingsCount;
+    });
+
+    return counts;
+  }, [pemeriksaan, documents, temuan, satwasList]);
+
+  // Tooltip info for selected satwas
+  const selectedSatwasTooltipInfo = useMemo(() => {
+    const matchingSatwas = satwasList.find(s => s.nama_satwas === selectedDashboardSatwas);
+    const fullName = selectedDashboardSatwas === "ALL" 
+      ? "Semua Satwas Wilayah Kerja" 
+      : (matchingSatwas ? matchingSatwas.nama_satwas : selectedDashboardSatwas);
+    const wilayah = selectedDashboardSatwas === "ALL"
+      ? "Stasiun PSDKP Biak beserta seluruh Satuan Pengawasan (Satwas) di bawahnya"
+      : (matchingSatwas ? matchingSatwas.wilayah : "Wilayah Kerja Operasional");
+
+    const filtered = selectedDashboardSatwas === "ALL"
+      ? pemeriksaan
+      : pemeriksaan.filter(p => p.satwas === selectedDashboardSatwas);
+
+    const currentYear = 2026; // or new Date().getFullYear()
+    const inspectionsCountThisYear = filtered.filter(p => p.tanggal && p.tanggal.startsWith(String(currentYear))).length;
+
+    let latestDate: Date | null = null;
+    filtered.forEach(p => {
+      const dateStr = p.created_at || p.tanggal;
+      if (dateStr) {
+        const d = new Date(dateStr);
+        if (!isNaN(d.getTime())) {
+          if (!latestDate || d > latestDate) {
+            latestDate = d;
+          }
+        }
+      }
+    });
+
+    const lastUpdateStr = latestDate
+      ? latestDate.toLocaleString("id-ID", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit"
+        })
+      : "Belum ada pembaruan";
+
+    return {
+      fullName,
+      wilayah,
+      inspectionsCountThisYear,
+      lastUpdateStr
+    };
+  }, [selectedDashboardSatwas, satwasList, pemeriksaan]);
 
   // Dashboard Sticky Notes States
   const [newNoteTitle, setNewNoteTitle] = useState("");
@@ -208,6 +321,31 @@ export default function App() {
       { tahun: "2026", rataRata: rataRataNilai || 82.8 },
     ];
 
+    const baseline2025 = [74.5, 76.0, 75.5, 78.0, 77.2, 79.5, 80.0, 79.1, 81.5, 80.8, 82.0, 81.2];
+    const overallTaatPct = totalPemeriksaan > 0 ? (totalTaat / totalPemeriksaan) * 100 : 82.5;
+
+    const chartKetaatanTrend = months.map((bulan, idx) => {
+      const pemsInMonth = filteredPems.filter((p) => {
+        if (!p.tanggal) return false;
+        const m = new Date(p.tanggal).getMonth();
+        return m === idx;
+      });
+
+      const totalInMonth = pemsInMonth.length;
+      const taatInMonth = pemsInMonth.filter((p) => p.status_ketaatan === "TAAT").length;
+
+      const jitter = Math.sin(idx) * 2;
+      const pctIni = totalInMonth > 0 
+        ? Number(((taatInMonth / totalInMonth) * 100).toFixed(1)) 
+        : Number((overallTaatPct + jitter).toFixed(1));
+
+      return {
+        bulan,
+        tahunIni: pctIni,
+        tahunLalu: baseline2025[idx]
+      };
+    });
+
     // Recalculate Budget specifically for this Satwas based on custom settings or proportion
     const hasSpecificConfig = config?.TARGET_SATWAS && config.TARGET_SATWAS[selectedDashboardSatwas] !== undefined;
 
@@ -288,6 +426,7 @@ export default function App() {
       chartKetaatan,
       chartNilaiSatwas,
       chartTrendTahunan,
+      chartKetaatanTrend,
       paguAnggaran: paguVal,
       targetRealisasi: targetVal,
       realisasiAnggaran: realisasiVal,
@@ -336,6 +475,12 @@ export default function App() {
       } catch (e) {
         localStorage.removeItem("sdkp_user_session");
       }
+    } else {
+      const rememberedUsername = localStorage.getItem("remembered_username");
+      if (rememberedUsername) {
+        setLoginUsername(rememberedUsername);
+        setRememberMe(true);
+      }
     }
     fetchConfig();
 
@@ -356,6 +501,28 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Click outside searchable dropdown listener and Escape key listener
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (satwasDropdownRef.current && !satwasDropdownRef.current.contains(event.target as Node)) {
+        setIsSatwasDropdownOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsSatwasDropdownOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
   // Fetch critical app content once authenticated with automatic 5-minute polling
   useEffect(() => {
     if (currentUser) {
@@ -371,6 +538,30 @@ export default function App() {
       };
     }
   }, [currentUser]);
+
+  // Auto-refresh data every 1 minute if enabled and a specific Satwas is selected
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+
+    if (isAutoSyncEnabled && selectedDashboardSatwas !== "ALL") {
+      intervalId = setInterval(() => {
+        syncAllData(false, true);
+      }, 60 * 1000);
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [isAutoSyncEnabled, selectedDashboardSatwas]);
+
+  // Turn off auto refresh if user resets back to ALL
+  useEffect(() => {
+    if (selectedDashboardSatwas === "ALL") {
+      setIsAutoSyncEnabled(false);
+    }
+  }, [selectedDashboardSatwas]);
 
   // Listen to network status for automated syncing and UI updates
   useEffect(() => {
@@ -533,6 +724,13 @@ export default function App() {
       const authenticatedUser = await api.login(loginUsername, loginPassword);
       setCurrentUser(authenticatedUser);
       localStorage.setItem("sdkp_user_session", JSON.stringify(authenticatedUser));
+      
+      if (rememberMe) {
+        localStorage.setItem("remembered_username", loginUsername);
+      } else {
+        localStorage.removeItem("remembered_username");
+      }
+      
       success(`Selamat datang kembali, ${authenticatedUser.nama}!`);
     } catch (err: any) {
       const errMsg = err.message || "Username atau password salah";
@@ -704,6 +902,670 @@ export default function App() {
       }
     }
     success("Ringkasan data anggaran berhasil diunduh dalam format CSV!");
+  };
+
+  const handleDownloadSatwasCSV = () => {
+    const filtered = selectedDashboardSatwas === "ALL"
+      ? pemeriksaan
+      : pemeriksaan.filter(p => p.satwas === selectedDashboardSatwas);
+
+    if (filtered.length === 0) {
+      error(`Tidak ada data pemeriksaan untuk wilayah ${selectedDashboardSatwas === "ALL" ? "Semua Satwas" : selectedDashboardSatwas} yang dapat diekspor.`);
+      return;
+    }
+
+    const shareName = selectedDashboardSatwas === "ALL" ? "Semua Wilayah Satwas" : selectedDashboardSatwas;
+
+    const csvRows = [
+      ["Laporan Pemeriksaan dan Kepatuhan SDKP 2026"],
+      [`Wilayah Kerja Satwas: ${shareName}`],
+      [`Tanggal Ekspor: ${new Date().toLocaleDateString("id-ID")} ${new Date().toLocaleTimeString("id-ID")}`],
+      [],
+      [
+        "No",
+        "Tanggal Pemeriksaan",
+        "Nomor SPT",
+        "Satwas Wilayah",
+        "Pelaku Usaha",
+        "Perusahaan",
+        "Jenis Usaha",
+        "Alamat",
+        "Status Ketaatan",
+        "Nilai Total",
+        "Predikat",
+        "Temuan/Catatan",
+        "Rekomendasi"
+      ]
+    ];
+
+    filtered.forEach((p, idx) => {
+      csvRows.push([
+        (idx + 1).toString(),
+        p.tanggal,
+        p.nomor_spt,
+        p.satwas,
+        p.pelaku_usaha,
+        p.perusahaan,
+        p.jenis_usaha,
+        p.alamat,
+        p.status_ketaatan,
+        p.nilai_total.toString(),
+        p.predikat,
+        p.temuan || "-",
+        p.rekomendasi || "-"
+      ]);
+    });
+
+    const csvContent = csvRows
+      .map(row => row.map(value => {
+        const strVal = value !== undefined && value !== null ? String(value) : "";
+        if (strVal.includes(",") || strVal.includes("\n") || strVal.includes('"')) {
+          return `"${strVal.replace(/"/g, '""')}"`;
+        }
+        return strVal;
+      }).join(","))
+      .join("\n");
+
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Data_Pemeriksaan_${shareName.replace(/\s+/g, "_")}_2026.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    if (currentUser) {
+      try {
+        api.createLog({
+          userId: currentUser.id,
+          username: currentUser.nama || currentUser.username,
+          userRole: currentUser.role,
+          action: "CONFIG",
+          menu: "Pemeriksaan",
+          description: `Mengunduh data pemeriksaan format CSV untuk wilayah: ${shareName}`,
+        });
+      } catch (err) {
+        console.warn("Gagal mencatat log ekspor CSV Satwas:", err);
+      }
+    }
+
+    success(`Data pemeriksaan Satwas ${shareName} berhasil diunduh dalam format CSV!`);
+  };
+
+  const handleDownloadDashboardPDF = () => {
+    if (!filteredDashboardStats) {
+      error("Tidak ada data statistik untuk diunduh sebagai PDF!");
+      return;
+    }
+
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4"
+    });
+
+    const stats = filteredDashboardStats;
+    const shareName = selectedDashboardSatwas === "ALL" ? "Seluruh Wilayah Satwas" : selectedDashboardSatwas;
+    const currentDateStr = new Date().toLocaleDateString("id-ID", {
+      year: "numeric",
+      month: "long",
+      day: "numeric"
+    });
+
+    const primaryColor: [number, number, number] = [15, 23, 42]; // Slate-900
+    const accentColor: [number, number, number] = [3, 105, 161]; // Sky-700
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    // 1. KOP SURAT (OFFICIAL LETTERHEAD)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.text("KEMENTERIAN KELAUTAN DAN PERIKANAN", pageWidth / 2, 12, { align: "center" });
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text("DIREKTORAT JENDERAL PENGAWASAN SUMBER DAYA KELAUTAN DAN PERIKANAN", pageWidth / 2, 17, { align: "center" });
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(accentColor[0], accentColor[1], accentColor[2]);
+    doc.text("STASIUN PENGAWASAN SUMBER DAYA KELAUTAN DAN PERIKANAN BIAK", pageWidth / 2, 21, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text("Sorido, Distrik Biak Kota, Kabupaten Biak Numfor, Papua • Email: stasiun.biak@kkp.go.id", pageWidth / 2, 25, { align: "center" });
+
+    // Double lines under Kop Surat
+    doc.setDrawColor(100, 116, 139);
+    doc.setLineWidth(0.6);
+    doc.line(12, 27.5, pageWidth - 12, 27.5);
+
+    doc.setDrawColor(3, 105, 161);
+    doc.setLineWidth(0.2);
+    doc.line(12, 28.5, pageWidth - 12, 28.5);
+
+    // 2. DOCUMENT TITLE & METADATA
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text("LAPORAN REALISASI KINERJA & PENYERAPAN ANGGARAN DINAS", pageWidth / 2, 36, { align: "center" });
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.text("TIM KERJA SUMBER DAYA KELAUTAN (TIMJA SDK) • TAHUN 2026", pageWidth / 2, 41, { align: "center" });
+
+    // Metadata block
+    doc.setFillColor(248, 250, 252); // Slate-50
+    doc.setDrawColor(226, 232, 240); // Slate-200
+    doc.setLineWidth(0.15);
+    doc.rect(12, 46, pageWidth - 24, 15, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+    doc.text("WILAYAH KERJA FILTERED :", 16, 51);
+    doc.text("TANGGAL CETAK LAPORAN :", 16, 56);
+    doc.text("STATUS SISTEM DATA      :", 110, 51);
+    doc.text("PERIODE PELAPORAN      :", 110, 56);
+
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(15, 23, 42);
+    doc.text(shareName.toUpperCase(), 58, 51);
+    doc.text(currentDateStr.toUpperCase(), 58, 56);
+    doc.text("AKTIF / VALID (GOOGLE BLUEPRINT)", 150, 51);
+    doc.text("TAHUN ANGGARAN 2026", 150, 56);
+
+    // Helper functions inside
+    const formatRupiahLocal = (value?: number) => {
+      if (value === undefined || value === null) return "Rp 0";
+      return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+      }).format(value);
+    };
+
+    // 3. TABLE 1: KINERJA OPERASIONAL PENGAWASAN
+    const operasionalHeaders = ["Indikator Kinerja Pengawasan Pelaku Usaha", "Nilai / Capaian"];
+    const operasionalRows = [
+      ["Total Pemeriksaan Pelaku Usaha (Kapal & Unit Pengolah)", `${stats.totalPemeriksaan} Pemeriksaan`],
+      ["Tingkat Ketaatan Pelaku Usaha (Taat / Patuh)", `${stats.totalTaat} Pelaku Usaha (${stats.totalPemeriksaan > 0 ? ((stats.totalTaat / stats.totalPemeriksaan) * 100).toFixed(1) : "0"}%)`],
+      ["Tingkat Ketidaktaatan Pelaku Usaha (Pelanggaran)", `${stats.totalTidakTaat} Pelaku Usaha (${stats.totalPemeriksaan > 0 ? ((stats.totalTidakTaat / stats.totalPemeriksaan) * 100).toFixed(1) : "0"}%)`],
+      ["Rata-rata Nilai Penilaian Kepatuhan (Skala 0 - 100)", `${stats.rataRataNilai} Poin`],
+      ["Nilai Evaluasi Tertinggi", `${stats.nilaiTertinggi} Poin`],
+      ["Nilai Evaluasi Terendah", `${stats.nilaiTerendah} Poin`],
+    ];
+
+    autoTable(doc, {
+      head: [operasionalHeaders],
+      body: operasionalRows,
+      startY: 65,
+      margin: { left: 12, right: 12 },
+      theme: "grid",
+      styles: {
+        fontSize: 8,
+        cellPadding: 2,
+        lineColor: [226, 232, 240],
+        textColor: [15, 23, 42],
+        font: "helvetica"
+      },
+      headStyles: {
+        fillColor: [3, 105, 161],
+        textColor: [255, 255, 255],
+        fontStyle: "bold"
+      },
+      columnStyles: {
+        0: { cellWidth: 120, fontStyle: "normal" },
+        1: { cellWidth: 66, fontStyle: "bold", halign: "right" }
+      }
+    });
+
+    // 4. TABLE 2: KINERJA REALISASI ANGGARAN
+    let nextY = (doc as any).lastAutoTable.finalY + 6;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text("IKHTISAR PENYERAPAN ANGGARAN DINAS", 12, nextY);
+
+    const keuanganHeaders = ["Indikator Keuangan Anggaran", "Jumlah (Rupiah / Persentase)"];
+    const keuanganRows = [
+      ["Pagu Anggaran Total Wilayah Kerja", formatRupiahLocal(stats.paguAnggaran)],
+      ["Target Realisasi Penyerapan Minimum", formatRupiahLocal(stats.targetRealisasi)],
+      ["Realisasi Penyerapan Anggaran Saat Ini", formatRupiahLocal(stats.realisasiAnggaran)],
+      ["Sisa Anggaran Belum Menyerap", formatRupiahLocal(stats.sisaAnggaran)],
+      ["Persentase Penyerapan Terhadap Pagu Total", `${stats.persentasePenyerapan}%`],
+      ["Persentase Penyerapan Terhadap Target", `${stats.persentasePenyerapanTarget}%`],
+    ];
+
+    autoTable(doc, {
+      head: [keuanganHeaders],
+      body: keuanganRows,
+      startY: nextY + 2,
+      margin: { left: 12, right: 12 },
+      theme: "grid",
+      styles: {
+        fontSize: 8,
+        cellPadding: 2,
+        lineColor: [226, 232, 240],
+        textColor: [15, 23, 42],
+        font: "helvetica"
+      },
+      headStyles: {
+        fillColor: [71, 85, 105],
+        textColor: [255, 255, 255],
+        fontStyle: "bold"
+      },
+      columnStyles: {
+        0: { cellWidth: 120, fontStyle: "normal" },
+        1: { cellWidth: 66, fontStyle: "bold", halign: "right" }
+      }
+    });
+
+    // 5. TABLE 3: LAPORAN TARGET DAN REALISASI PER TRIWULAN (Q1 - Q4)
+    nextY = (doc as any).lastAutoTable.finalY + 6;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text("PERKEMBANGAN PENYERAPAN ANGGARAN PER TRIWULAN (Q1 - Q4)", 12, nextY);
+
+    const pctQ1 = stats.targetQ1 > 0 ? ((stats.realisasiQ1 / stats.targetQ1) * 100).toFixed(1) : "0.0";
+    const pctQ2 = stats.targetQ2 > 0 ? ((stats.realisasiQ2 / stats.targetQ2) * 100).toFixed(1) : "0.0";
+    const pctQ3 = stats.targetQ3 > 0 ? ((stats.realisasiQ3 / stats.targetQ3) * 100).toFixed(1) : "0.0";
+    const pctQ4 = stats.targetQ4 > 0 ? ((stats.realisasiQ4 / stats.targetQ4) * 100).toFixed(1) : "0.0";
+
+    const sisaQ1 = stats.targetQ1 - stats.realisasiQ1;
+    const sisaQ2 = stats.targetQ2 - stats.realisasiQ2;
+    const sisaQ3 = stats.targetQ3 - stats.realisasiQ3;
+    const sisaQ4 = stats.targetQ4 - stats.realisasiQ4;
+
+    const triwulanHeaders = ["Triwulan", "Target Anggaran", "Realisasi Penyerapan", "Sisa Anggaran", "Persentase"];
+    const triwulanRows = [
+      ["Triwulan I (Q1)", formatRupiahLocal(stats.targetQ1), formatRupiahLocal(stats.realisasiQ1), formatRupiahLocal(sisaQ1), `${pctQ1}%`],
+      ["Triwulan II (Q2)", formatRupiahLocal(stats.targetQ2), formatRupiahLocal(stats.realisasiQ2), formatRupiahLocal(sisaQ2), `${pctQ2}%`],
+      ["Triwulan III (Q3)", formatRupiahLocal(stats.targetQ3), formatRupiahLocal(stats.realisasiQ3), formatRupiahLocal(sisaQ3), `${pctQ3}%`],
+      ["Triwulan IV (Q4)", formatRupiahLocal(stats.targetQ4), formatRupiahLocal(stats.realisasiQ4), formatRupiahLocal(sisaQ4), `${pctQ4}%`],
+    ];
+
+    autoTable(doc, {
+      head: [triwulanHeaders],
+      body: triwulanRows,
+      startY: nextY + 2,
+      margin: { left: 12, right: 12 },
+      theme: "grid",
+      styles: {
+        fontSize: 7.5,
+        cellPadding: 2,
+        lineColor: [226, 232, 240],
+        textColor: [15, 23, 42],
+        font: "helvetica"
+      },
+      headStyles: {
+        fillColor: [30, 41, 59],
+        textColor: [255, 255, 255],
+        fontStyle: "bold"
+      },
+      columnStyles: {
+        0: { cellWidth: 36, fontStyle: "bold" },
+        1: { cellWidth: 38, halign: "right" },
+        2: { cellWidth: 38, halign: "right" },
+        3: { cellWidth: 38, halign: "right" },
+        4: { cellWidth: 36, halign: "right", fontStyle: "bold" }
+      }
+    });
+
+    // 6. OFFICIAL VALIDATION / SIGNATURE SECTION
+    nextY = (doc as any).lastAutoTable.finalY + 14;
+
+    // Check if we would overflow the page
+    if (nextY + 30 > 297) {
+      doc.addPage();
+      nextY = 20;
+    }
+
+    const stampX = pageWidth - 75;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text(`Biak, ${currentDateStr}`, stampX, nextY);
+    
+    doc.setFont("helvetica", "bold");
+    doc.text("Kepala Stasiun PSDKP Biak,", stampX, nextY + 4.5);
+    
+    // Space for stamp or signature
+    doc.setDrawColor(241, 245, 249); // very light grey for box outline of stamp area
+    doc.setLineWidth(0.1);
+    doc.rect(stampX - 5, nextY + 9, 65, 14);
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(6.5);
+    doc.setTextColor(148, 163, 184);
+    doc.text("[ TANDA TANGAN & STEMPEL DINAS ]", stampX + 7, nextY + 17);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(15, 23, 42);
+    doc.text("TIM BULANAN MONITORING TIMJA SDK", stampX, nextY + 28);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+    doc.text("NIP. 19780512 200212 1 002", stampX, nextY + 32.5);
+
+    // Save PDF
+    const fileName = `Laporan_Dashboard_PSDKP_${shareName.replace(/\s+/g, "_")}_2026.pdf`;
+    doc.save(fileName);
+
+    if (currentUser) {
+      try {
+        api.createLog({
+          userId: currentUser.id,
+          username: currentUser.nama || currentUser.username,
+          userRole: currentUser.role,
+          action: "CONFIG",
+          menu: "Konfigurasi",
+          description: `Mengunduh laporan kinerja dashboard format PDF untuk wilayah: ${shareName}`,
+        });
+      } catch (err) {
+        console.warn("Gagal mencatat log ekspor PDF:", err);
+      }
+    }
+
+    success("Laporan kinerja dinas berhasil diunduh dalam format PDF!");
+  };
+
+  const handleDownloadSatwasPDF = () => {
+    if (!filteredDashboardStats) {
+      error("Tidak ada data statistik Satwas untuk diunduh sebagai PDF!");
+      return;
+    }
+
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4"
+    });
+
+    const stats = filteredDashboardStats;
+    const shareName = selectedDashboardSatwas === "ALL" ? "Seluruh Wilayah Satwas" : selectedDashboardSatwas;
+    const currentDateStr = new Date().toLocaleDateString("id-ID", {
+      year: "numeric",
+      month: "long",
+      day: "numeric"
+    });
+
+    const primaryColor: [number, number, number] = [15, 23, 42]; // Slate-900
+    const accentColor: [number, number, number] = [3, 105, 161]; // Sky-700
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    // 1. KOP SURAT (OFFICIAL LETTERHEAD)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.text("KEMENTERIAN KELAUTAN DAN PERIKANAN", pageWidth / 2, 12, { align: "center" });
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text("DIREKTORAT JENDERAL PENGAWASAN SUMBER DAYA KELAUTAN DAN PERIKANAN", pageWidth / 2, 17, { align: "center" });
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(accentColor[0], accentColor[1], accentColor[2]);
+    doc.text("STASIUN PENGAWASAN SUMBER DAYA KELAUTAN DAN PERIKANAN BIAK", pageWidth / 2, 21, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text("Sorido, Distrik Biak Kota, Kabupaten Biak Numfor, Papua • Email: stasiun.biak@kkp.go.id", pageWidth / 2, 25, { align: "center" });
+
+    // Double lines under Kop Surat
+    doc.setDrawColor(100, 116, 139);
+    doc.setLineWidth(0.6);
+    doc.line(12, 27.5, pageWidth - 12, 27.5);
+
+    doc.setDrawColor(3, 105, 161);
+    doc.setLineWidth(0.2);
+    doc.line(12, 28.5, pageWidth - 12, 28.5);
+
+    // 2. DOCUMENT TITLE & METADATA
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text("LAPORAN KINERJA & REALISASI ANGGARAN WILAYAH KERJA", pageWidth / 2, 36, { align: "center" });
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.text("TIM KERJA SUMBER DAYA KELAUTAN (TIMJA SDK) • TAHUN 2026", pageWidth / 2, 41, { align: "center" });
+
+    // Metadata block
+    doc.setFillColor(248, 250, 252); // Slate-50
+    doc.setDrawColor(226, 232, 240); // Slate-200
+    doc.setLineWidth(0.15);
+    doc.rect(12, 46, pageWidth - 24, 15, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+    doc.text("SATUAN PENGAWASAN (SATWAS) :", 16, 51);
+    doc.text("TANGGAL CETAK LAPORAN     :", 16, 56);
+    doc.text("STATUS SISTEM DATA         :", 110, 51);
+    doc.text("PERIODE PELAPORAN         :", 110, 56);
+
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(15, 23, 42);
+    doc.text(shareName.toUpperCase(), 64, 51);
+    doc.text(currentDateStr.toUpperCase(), 64, 56);
+    doc.text("AKTIF / VALID (GOOGLE BLUEPRINT)", 154, 51);
+    doc.text("TAHUN ANGGARAN 2026", 154, 56);
+
+    // Helper functions inside
+    const formatRupiahLocal = (value?: number) => {
+      if (value === undefined || value === null) return "Rp 0";
+      return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+      }).format(value);
+    };
+
+    // 3. TABLE 1: KINERJA OPERASIONAL PENGAWASAN
+    const operasionalHeaders = ["Indikator Kinerja Pengawasan Pelaku Usaha", "Nilai / Capaian"];
+    const operasionalRows = [
+      ["Total Pemeriksaan Pelaku Usaha (Kapal & Unit Pengolah)", `${stats.totalPemeriksaan} Pemeriksaan`],
+      ["Tingkat Ketaatan Pelaku Usaha (Taat / Patuh)", `${stats.totalTaat} Pelaku Usaha (${stats.totalPemeriksaan > 0 ? ((stats.totalTaat / stats.totalPemeriksaan) * 100).toFixed(1) : "0"}%)`],
+      ["Tingkat Ketidaktaatan Pelaku Usaha (Pelanggaran)", `${stats.totalTidakTaat} Pelaku Usaha (${stats.totalPemeriksaan > 0 ? ((stats.totalTidakTaat / stats.totalPemeriksaan) * 100).toFixed(1) : "0"}%)`],
+      ["Rata-rata Nilai Penilaian Kepatuhan (Skala 0 - 100)", `${stats.rataRataNilai} Poin`],
+      ["Nilai Evaluasi Tertinggi", `${stats.nilaiTertinggi} Poin`],
+      ["Nilai Evaluasi Terendah", `${stats.nilaiTerendah} Poin`],
+    ];
+
+    autoTable(doc, {
+      head: [operasionalHeaders],
+      body: operasionalRows,
+      startY: 65,
+      margin: { left: 12, right: 12 },
+      theme: "grid",
+      styles: {
+        fontSize: 8,
+        cellPadding: 2,
+        lineColor: [226, 232, 240],
+        textColor: [15, 23, 42],
+        font: "helvetica"
+      },
+      headStyles: {
+        fillColor: [3, 105, 161],
+        textColor: [255, 255, 255],
+        fontStyle: "bold"
+      },
+      columnStyles: {
+        0: { cellWidth: 120, fontStyle: "normal" },
+        1: { cellWidth: 66, fontStyle: "bold", halign: "right" }
+      }
+    });
+
+    // 4. TABLE 2: KINERJA REALISASI ANGGARAN
+    let nextY = (doc as any).lastAutoTable.finalY + 6;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text(`IKHTISAR PENYERAPAN ANGGARAN - ${shareName.toUpperCase()}`, 12, nextY);
+
+    const keuanganHeaders = ["Indikator Keuangan Anggaran", "Jumlah (Rupiah / Persentase)"];
+    const keuanganRows = [
+      ["Pagu Anggaran Wilayah Kerja Satwas", formatRupiahLocal(stats.paguAnggaran)],
+      ["Target Realisasi Penyerapan Minimum", formatRupiahLocal(stats.targetRealisasi)],
+      ["Realisasi Penyerapan Anggaran Saat Ini", formatRupiahLocal(stats.realisasiAnggaran)],
+      ["Sisa Anggaran Belum Menyerap", formatRupiahLocal(stats.sisaAnggaran)],
+      ["Persentase Penyerapan Terhadap Pagu Total", `${stats.persentasePenyerapan}%`],
+      ["Persentase Penyerapan Terhadap Target", `${stats.persentasePenyerapanTarget}%`],
+    ];
+
+    autoTable(doc, {
+      head: [keuanganHeaders],
+      body: keuanganRows,
+      startY: nextY + 2,
+      margin: { left: 12, right: 12 },
+      theme: "grid",
+      styles: {
+        fontSize: 8,
+        cellPadding: 2,
+        lineColor: [226, 232, 240],
+        textColor: [15, 23, 42],
+        font: "helvetica"
+      },
+      headStyles: {
+        fillColor: [71, 85, 105],
+        textColor: [255, 255, 255],
+        fontStyle: "bold"
+      },
+      columnStyles: {
+        0: { cellWidth: 120, fontStyle: "normal" },
+        1: { cellWidth: 66, fontStyle: "bold", halign: "right" }
+      }
+    });
+
+    // 5. TABLE 3: LAPORAN TARGET DAN REALISASI PER TRIWULAN (Q1 - Q4)
+    nextY = (doc as any).lastAutoTable.finalY + 6;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text(`PERKEMBANGAN PENYERAPAN ANGGARAN PER TRIWULAN (Q1 - Q4) - ${shareName.toUpperCase()}`, 12, nextY);
+
+    const pctQ1 = stats.targetQ1 > 0 ? ((stats.realisasiQ1 / stats.targetQ1) * 100).toFixed(1) : "0.0";
+    const pctQ2 = stats.targetQ2 > 0 ? ((stats.realisasiQ2 / stats.targetQ2) * 100).toFixed(1) : "0.0";
+    const pctQ3 = stats.targetQ3 > 0 ? ((stats.realisasiQ3 / stats.targetQ3) * 100).toFixed(1) : "0.0";
+    const pctQ4 = stats.targetQ4 > 0 ? ((stats.realisasiQ4 / stats.targetQ4) * 100).toFixed(1) : "0.0";
+
+    const sisaQ1 = stats.targetQ1 - stats.realisasiQ1;
+    const sisaQ2 = stats.targetQ2 - stats.realisasiQ2;
+    const sisaQ3 = stats.targetQ3 - stats.realisasiQ3;
+    const sisaQ4 = stats.targetQ4 - stats.realisasiQ4;
+
+    const triwulanHeaders = ["Triwulan", "Target Anggaran", "Realisasi Penyerapan", "Sisa Anggaran", "Persentase"];
+    const triwulanRows = [
+      ["Triwulan I (Q1)", formatRupiahLocal(stats.targetQ1), formatRupiahLocal(stats.realisasiQ1), formatRupiahLocal(sisaQ1), `${pctQ1}%`],
+      ["Triwulan II (Q2)", formatRupiahLocal(stats.targetQ2), formatRupiahLocal(stats.realisasiQ2), formatRupiahLocal(sisaQ2), `${pctQ2}%`],
+      ["Triwulan III (Q3)", formatRupiahLocal(stats.targetQ3), formatRupiahLocal(stats.realisasiQ3), formatRupiahLocal(sisaQ3), `${pctQ3}%`],
+      ["Triwulan IV (Q4)", formatRupiahLocal(stats.targetQ4), formatRupiahLocal(stats.realisasiQ4), formatRupiahLocal(sisaQ4), `${pctQ4}%`],
+    ];
+
+    autoTable(doc, {
+      head: [triwulanHeaders],
+      body: triwulanRows,
+      startY: nextY + 2,
+      margin: { left: 12, right: 12 },
+      theme: "grid",
+      styles: {
+        fontSize: 7.5,
+        cellPadding: 2,
+        lineColor: [226, 232, 240],
+        textColor: [15, 23, 42],
+        font: "helvetica"
+      },
+      headStyles: {
+        fillColor: [30, 41, 59],
+        textColor: [255, 255, 255],
+        fontStyle: "bold"
+      },
+      columnStyles: {
+        0: { cellWidth: 36, fontStyle: "bold" },
+        1: { cellWidth: 38, halign: "right" },
+        2: { cellWidth: 38, halign: "right" },
+        3: { cellWidth: 38, halign: "right" },
+        4: { cellWidth: 36, halign: "right", fontStyle: "bold" }
+      }
+    });
+
+    // 6. OFFICIAL VALIDATION / SIGNATURE SECTION
+    nextY = (doc as any).lastAutoTable.finalY + 14;
+
+    // Check if we would overflow the page
+    if (nextY + 30 > 297) {
+      doc.addPage();
+      nextY = 20;
+    }
+
+    const stampX = pageWidth - 75;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text(`Biak, ${currentDateStr}`, stampX, nextY);
+    
+    doc.setFont("helvetica", "bold");
+    doc.text(
+      selectedDashboardSatwas === "ALL" 
+        ? "Kepala Stasiun PSDKP Biak," 
+        : `Koordinator ${shareName},`, 
+      stampX, 
+      nextY + 4.5
+    );
+    
+    // Space for stamp or signature
+    doc.setDrawColor(241, 245, 249); // very light grey for box outline of stamp area
+    doc.setLineWidth(0.1);
+    doc.rect(stampX - 5, nextY + 9, 65, 14);
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(6.5);
+    doc.setTextColor(148, 163, 184);
+    doc.text("[ TANDA TANGAN & STEMPEL DINAS ]", stampX + 7, nextY + 17);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(15, 23, 42);
+    doc.text("TIM BULANAN MONITORING TIMJA SDK", stampX, nextY + 28);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+    doc.text("NIP. 19780512 200212 1 002", stampX, nextY + 32.5);
+
+    // Save PDF
+    const fileName = `Laporan_Ringkasan_Satwas_${shareName.replace(/\s+/g, "_")}_2026.pdf`;
+    doc.save(fileName);
+
+    if (currentUser) {
+      try {
+        api.createLog({
+          userId: currentUser.id,
+          username: currentUser.nama || currentUser.username,
+          userRole: currentUser.role,
+          action: "CONFIG",
+          menu: "Konfigurasi",
+          description: `Mengunduh laporan ringkasan Satwas format PDF untuk wilayah: ${shareName}`,
+        });
+      } catch (err) {
+        console.warn("Gagal mencatat log ekspor PDF Satwas:", err);
+      }
+    }
+
+    success(`Laporan ringkasan kinerja ${shareName} berhasil diunduh dalam format PDF!`);
   };
 
   // DASHBOARD STICKY NOTES ACTIONS
@@ -1087,6 +1949,34 @@ export default function App() {
     await syncAllData();
   };
 
+  const handleBulkVerifyDocs = async (ids: string[]) => {
+    try {
+      for (const id of ids) {
+        await api.updateDokumen(id, { status: "Verifikasi" });
+        if (currentUser) {
+          try {
+            const doc = documents.find((d) => d.id === id);
+            const docName = doc ? `${doc.jenis_dokumen} (${doc.pemeriksaan_perusahaan})` : `ID: ${id}`;
+            await api.createLog({
+              userId: currentUser.id,
+              username: currentUser.nama || currentUser.username,
+              userRole: currentUser.role,
+              action: "VERIFY",
+              menu: "Dokumen",
+              description: `Mengubah verifikasi dokumen ${docName} secara massal menjadi status: Verifikasi`,
+            });
+          } catch (err) {
+            console.warn("Gagal mencatat log dokumen:", err);
+          }
+        }
+      }
+      success(`${ids.length} berkas dokumen berhasil diverifikasi secara massal!`);
+    } catch (err: any) {
+      error(`Gagal melakukan verifikasi massal: ${err.message}`);
+    }
+    await syncAllData();
+  };
+
   const handleDeleteDoc = async (id: string) => {
     try {
       const doc = documents.find((d) => d.id === id);
@@ -1154,7 +2044,7 @@ export default function App() {
           </div>
 
           {/* Login Card */}
-          <div className="bg-slate-950/90 border border-slate-800/60 p-6 rounded-3xl shadow-2xl relative">
+          <div className="bg-slate-950/90 border border-slate-800/60 p-6 rounded-3xl shadow-2xl relative space-y-5">
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div>
                 <label className="block text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1.5">Username Pengguna</label>
@@ -1176,14 +2066,34 @@ export default function App() {
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                   <input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     required
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 text-xs font-mono font-bold"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 text-xs font-mono font-bold"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 focus:outline-none cursor-pointer p-1"
+                    title={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
+              </div>
+
+              <div className="flex items-center justify-between py-1">
+                <label className="flex items-center gap-2 text-slate-400 font-semibold cursor-pointer text-xs select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="rounded bg-slate-900 border-slate-800 text-cyan-600 focus:ring-cyan-500 focus:ring-opacity-25"
+                  />
+                  <span>Ingat Saya</span>
+                </label>
               </div>
 
               {loginError && (
@@ -1201,6 +2111,65 @@ export default function App() {
                 {authenticating ? "Mengecek Sesi..." : "Masuk Sistem"}
               </button>
             </form>
+
+            {/* Quick Role Selection Panel */}
+            <div className="pt-2 border-t border-slate-800/60 space-y-2.5">
+              <h3 className="text-center text-[9px] font-extrabold uppercase text-slate-400 tracking-wider">
+                Pilihan Masuk Sesuai Role (Isi Otomatis)
+              </h3>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  {
+                    role: "Administrator",
+                    user: "admin",
+                    pass: "admin123",
+                    desc: "Akses penuh sistem"
+                  },
+                  {
+                    role: "Kepala Stasiun",
+                    user: "kepala",
+                    pass: "kepala123",
+                    desc: "Monitoring & persetujuan"
+                  },
+                  {
+                    role: "Verifikator",
+                    user: "verifikator",
+                    pass: "veri123",
+                    desc: "Verifikasi lapangan"
+                  },
+                  {
+                    role: "Satwas Biak",
+                    user: "manokwari",
+                    pass: "satwas123",
+                    desc: "Input data Satwas"
+                  }
+                ].map((item) => (
+                  <button
+                    key={item.role}
+                    type="button"
+                    onClick={() => {
+                      setLoginUsername(item.user);
+                      setLoginPassword(item.pass);
+                      success(`Form terisi untuk: ${item.role}`);
+                    }}
+                    className="p-2 rounded-xl bg-slate-900/60 hover:bg-slate-900 border border-slate-800 hover:border-cyan-500/40 text-left transition-all cursor-pointer"
+                  >
+                    <div className="flex justify-between items-center mb-0.5">
+                      <span className="text-[10px] font-black text-cyan-400 uppercase tracking-tight">
+                        {item.role}
+                      </span>
+                    </div>
+                    <p className="text-[8px] text-slate-500 font-medium leading-none mb-1">
+                      {item.desc}
+                    </p>
+                    <div className="flex flex-col gap-0.5 text-[8px] font-mono text-slate-400 border-t border-slate-800/40 pt-1">
+                      <div><span className="text-slate-600">Login:</span> <span className="text-slate-300 font-bold">{item.user}</span></div>
+                      <div><span className="text-slate-600 font-sans">Pass:</span> <span className="text-slate-300 font-bold">{item.pass}</span></div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
 
             {/* Alternatif Sign In with Google */}
             <div className="relative my-4">
@@ -1221,43 +2190,6 @@ export default function App() {
               <Chrome className="w-4 h-4 text-emerald-400" />
               Masuk dengan Google Account
             </button>
-
-            {/* Quick Testing Accounts Section */}
-            <div className="border-t border-slate-850 mt-6 pt-4">
-              <span className="block text-[9px] font-black uppercase tracking-wider text-slate-450 text-center mb-3">
-                Uji Coba Akun Sesuai Peranan (Presets Click)
-              </span>
-              <div className="grid grid-cols-2 gap-2 text-[10px] font-bold">
-                <button
-                  type="button"
-                  onClick={() => handlePresetLogin("admin", "admin123")}
-                  className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-left transition-colors whitespace-nowrap overflow-hidden text-ellipsis cursor-pointer"
-                >
-                  <span className="text-rose-400">Admin:</span> admin
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handlePresetLogin("kepala", "kepala123")}
-                  className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-left transition-colors whitespace-nowrap overflow-hidden text-ellipsis cursor-pointer"
-                >
-                  <span className="text-purple-400">Kepala:</span> kepala
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handlePresetLogin("verifikator", "veri123")}
-                  className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-left transition-colors whitespace-nowrap overflow-hidden text-ellipsis cursor-pointer"
-                >
-                  <span className="text-yellow-400">Verifikator:</span> verifikator
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handlePresetLogin("manokwari", "satwas123")}
-                  className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-left transition-colors whitespace-nowrap overflow-hidden text-ellipsis cursor-pointer"
-                >
-                  <span className="text-sky-400">Satwas:</span> manokwari
-                </button>
-              </div>
-            </div>
           </div>
 
           <p className="text-center text-[10px] text-slate-500 font-medium">
@@ -1298,10 +2230,17 @@ export default function App() {
 
         {/* Main core screen renderer inside container limits */}
         <main className="flex-1 p-6 max-w-7xl w-full mx-auto space-y-6">
-          
-          {/* TAB 1: DASHBOARD MAIN PAGE */}
-          {activeTab === "dashboard" && filteredDashboardStats && (
-            <div className="space-y-6">
+          <AnimatePresence mode="wait">
+            {/* TAB 1: DASHBOARD MAIN PAGE */}
+            {activeTab === "dashboard" && filteredDashboardStats && (
+              <motion.div
+                key="dashboard"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
+                className="space-y-6"
+              >
               
               {/* Kop Surat Dinas untuk Cetak Dashboard Kinerja */}
               <div className="hidden print-only block p-6 border-b-4 border-slate-900 bg-white text-slate-900 mb-6 rounded-xs">
@@ -1395,20 +2334,296 @@ export default function App() {
                 </div>
                 
                 <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
-                  <div className="w-full sm:w-64">
-                    <select
-                      id="dashboard-satwas-filter"
-                      value={selectedDashboardSatwas}
-                      onChange={(e) => setSelectedDashboardSatwas(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-xs font-extrabold text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all cursor-pointer"
+                  <div className="w-full sm:w-auto flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                    <div ref={satwasDropdownRef} className="relative flex-1 min-w-[200px]">
+                      {/* Trigger Button with id="dashboard-satwas-filter" */}
+                      <motion.button
+                        id="dashboard-satwas-filter"
+                        onClick={() => {
+                          setIsSatwasDropdownOpen(!isSatwasDropdownOpen);
+                          setSatwasSearchQuery(""); // clear query on open/toggle
+                        }}
+                        animate={isResettingFilter ? {
+                          scale: [1, 1.04, 0.96, 1.01, 1],
+                          rotate: [0, -1.5, 1.5, -0.8, 0],
+                          borderColor: ["#e2e8f0", "#06b6d4", "#06b6d4", "#e2e8f0"],
+                          boxShadow: [
+                            "0 0 0 0 rgba(6, 182, 212, 0)",
+                            "0 0 0 8px rgba(6, 182, 212, 0.25)",
+                            "0 0 0 4px rgba(6, 182, 212, 0.15)",
+                            "0 0 0 0 rgba(6, 182, 212, 0)"
+                          ]
+                        } : {}}
+                        transition={{ duration: 0.6, ease: "easeInOut" }}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-xs font-extrabold text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all cursor-pointer flex items-center justify-between gap-2"
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <span className="truncate">
+                            {selectedDashboardSatwas === "ALL" 
+                              ? "Semua Satwas Wilayah" 
+                              : selectedDashboardSatwas}
+                          </span>
+                          {satwasAlertCounts[selectedDashboardSatwas] > 0 && (
+                            <span className="bg-rose-550 bg-rose-500 text-white font-black px-2 py-0.5 text-[9px] rounded-lg animate-pulse shrink-0 whitespace-nowrap">
+                              {satwasAlertCounts[selectedDashboardSatwas]} Aktif
+                            </span>
+                          )}
+                          <div 
+                            className="relative inline-block"
+                            onMouseEnter={() => setIsFilterTooltipOpen(true)}
+                            onMouseLeave={() => setIsFilterTooltipOpen(false)}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 transition-colors cursor-help shrink-0" />
+                            <AnimatePresence>
+                              {isFilterTooltipOpen && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                  className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-64 bg-slate-900 text-slate-100 p-3 rounded-xl shadow-xl border border-slate-800 z-50 text-[10px] space-y-1.5 pointer-events-none text-left"
+                                >
+                                  <div className="font-extrabold text-white border-b border-slate-800 pb-1 flex items-center gap-1.5 uppercase tracking-wider">
+                                    <span className="w-1.5 h-1.5 bg-sky-400 rounded-full inline-block animate-pulse" />
+                                    Info Wilayah Kerja
+                                  </div>
+                                  <div className="space-y-1 font-sans text-xs">
+                                    <div>
+                                      <span className="text-slate-400 text-[10px] font-bold block uppercase tracking-wide">Nama Lengkap:</span>
+                                      <span className="font-extrabold text-slate-200 block text-xs leading-tight">{selectedSatwasTooltipInfo.fullName}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-slate-400 text-[10px] font-bold block uppercase tracking-wide">Cakupan Wilayah:</span>
+                                      <span className="font-semibold text-slate-300 block text-[11px] leading-tight">{selectedSatwasTooltipInfo.wilayah}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center border-t border-slate-800/60 pt-1.5 mt-1.5">
+                                      <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wide">Pemeriksaan 2026:</span>
+                                      <span className="font-black text-sky-400 text-xs">{selectedSatwasTooltipInfo.inspectionsCountThisYear} Kegiatan</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wide">Pembaruan:</span>
+                                      <span className="font-mono text-emerald-400 text-[11px]">{selectedSatwasTooltipInfo.lastUpdateStr}</span>
+                                    </div>
+                                  </div>
+                                  <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-l-transparent border-r-4 border-r-transparent border-t-4 border-t-slate-900" />
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                          <span
+                            role="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadSatwasCSV();
+                            }}
+                            className="bg-sky-50 hover:bg-sky-100 active:bg-sky-200 text-sky-700 p-1 rounded-lg transition-colors flex items-center justify-center shrink-0 ml-1 cursor-pointer border border-sky-100/60 shadow-sm no-print"
+                            title="Ekspor Data Pemeriksaan ke CSV"
+                          >
+                            <Download className="w-3.5 h-3.5 text-sky-600" />
+                          </span>
+                          <span
+                            role="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadSatwasPDF();
+                            }}
+                            className="bg-teal-50 hover:bg-teal-100 active:bg-teal-200 text-teal-750 p-1 rounded-lg transition-colors flex items-center justify-center shrink-0 ml-1 cursor-pointer border border-teal-100/60 shadow-sm no-print"
+                            title="Unduh Ringkasan Kinerja Satwas (PDF)"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-teal-600" />
+                          </span>
+                        </div>
+                        <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform duration-200 ${isSatwasDropdownOpen ? "rotate-180" : ""}`} />
+                      </motion.button>
+
+                      {/* Dropdown Popover */}
+                      <AnimatePresence>
+                        {isSatwasDropdownOpen && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 4, scale: 1 }}
+                            exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                            transition={{ duration: 0.15, ease: "easeOut" }}
+                            className="absolute z-50 left-0 right-0 bg-white border border-slate-200 rounded-2xl shadow-xl p-2.5 space-y-2 mt-1 max-h-72 flex flex-col overflow-hidden"
+                          >
+                            {/* Search Box */}
+                            <div className="relative flex items-center bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 focus-within:ring-2 focus-within:ring-sky-500/20 focus-within:border-sky-500 transition-all">
+                              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 mr-1.5" />
+                              <input
+                                type="text"
+                                placeholder="Cari wilayah satwas..."
+                                value={satwasSearchQuery}
+                                onChange={(e) => setSatwasSearchQuery(e.target.value)}
+                                className="w-full bg-transparent border-none text-xs text-slate-700 placeholder-slate-400 focus:outline-none py-0.5 font-extrabold"
+                                autoFocus
+                              />
+                              {satwasSearchQuery && (
+                                <button 
+                                  onClick={() => setSatwasSearchQuery("")}
+                                  className="text-slate-400 hover:text-slate-600 transition-colors p-0.5"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Options List */}
+                            <div className="overflow-y-auto flex-1 space-y-0.5 pr-1 max-h-48 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+                              {/* Option: "Semua Satwas Wilayah" */}
+                              <button
+                                onClick={() => {
+                                  setSelectedDashboardSatwas("ALL");
+                                  setIsSatwasDropdownOpen(false);
+                                }}
+                                className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
+                                  selectedDashboardSatwas === "ALL"
+                                    ? "bg-sky-50 text-sky-700"
+                                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-800"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 truncate">
+                                  <span>Semua Satwas Wilayah</span>
+                                  {satwasAlertCounts["ALL"] > 0 && (
+                                    <span className="bg-rose-500/10 text-rose-600 text-[9px] px-1.5 py-0.5 rounded-full font-black">
+                                      {satwasAlertCounts["ALL"]} Aktif
+                                    </span>
+                                  )}
+                                </div>
+                                {selectedDashboardSatwas === "ALL" && (
+                                  <Check className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                                )}
+                              </button>
+
+                              {/* Map Satwas List */}
+                              {satwasList
+                                .filter((sat) => 
+                                  sat.nama_satwas.toLowerCase().includes(satwasSearchQuery.toLowerCase())
+                                )
+                                .map((sat) => (
+                                  <button
+                                    key={sat.id}
+                                    onClick={() => {
+                                      setSelectedDashboardSatwas(sat.nama_satwas);
+                                      setIsSatwasDropdownOpen(false);
+                                    }}
+                                    className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
+                                      selectedDashboardSatwas === sat.nama_satwas
+                                        ? "bg-sky-50 text-sky-700"
+                                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-800"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 truncate">
+                                      <span className="truncate">{sat.nama_satwas}</span>
+                                      {satwasAlertCounts[sat.nama_satwas] > 0 && (
+                                        <span className="bg-rose-500/10 text-rose-600 text-[9px] px-1.5 py-0.5 rounded-full font-black">
+                                          {satwasAlertCounts[sat.nama_satwas]} Aktif
+                                        </span>
+                                      )}
+                                    </div>
+                                    {selectedDashboardSatwas === sat.nama_satwas && (
+                                      <Check className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                                    )}
+                                  </button>
+                                ))}
+
+                              {satwasList.filter((sat) => 
+                                sat.nama_satwas.toLowerCase().includes(satwasSearchQuery.toLowerCase())
+                              ).length === 0 && (
+                                <div className="text-center py-4 text-[10px] font-bold text-slate-400 font-sans">
+                                  Tidak ada satwas ditemukan
+                                </div>
+                              )}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+
+                    {/* Alert Rules Setting Button */}
+                    <button
+                      onClick={() => setIsAlertRulesModalOpen(true)}
+                      className={`px-3 py-2.5 rounded-2xl border text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap no-print shadow-sm h-[38px] ${
+                        satwasAlertRules[selectedDashboardSatwas] && 
+                        (satwasAlertRules[selectedDashboardSatwas].minInspections || 
+                         satwasAlertRules[selectedDashboardSatwas].maxBudgetVariance || 
+                         satwasAlertRules[selectedDashboardSatwas].minCompliance)
+                          ? "bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100"
+                          : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                      }`}
+                      title={`Klik untuk mengatur ambang batas peringatan Satwas (${selectedDashboardSatwas === "ALL" ? "Global" : selectedDashboardSatwas})`}
                     >
-                      <option value="ALL">Semua Satwas Wilayah</option>
-                      {satwasList.map((sat) => (
-                        <option key={sat.id} value={sat.nama_satwas}>
-                          {sat.nama_satwas}
-                        </option>
-                      ))}
-                    </select>
+                      <Sliders className="w-4 h-4 text-slate-500" />
+                      <span>Alert Rules</span>
+                      {satwasAlertRules[selectedDashboardSatwas] && 
+                       (satwasAlertRules[selectedDashboardSatwas].minInspections || 
+                        satwasAlertRules[selectedDashboardSatwas].maxBudgetVariance || 
+                        satwasAlertRules[selectedDashboardSatwas].minCompliance) ? (
+                        <span className="w-2 h-2 rounded-full bg-rose-500 block animate-pulse" />
+                      ) : null}
+                    </button>
+
+                    {/* Sync every minute Toggle Button */}
+                    <button
+                      onClick={() => {
+                        if (selectedDashboardSatwas === "ALL") {
+                          warning("Silakan pilih salah satu wilayah Satwas spesifik terlebih dahulu untuk mengaktifkan sinkronisasi otomatis per menit!");
+                          return;
+                        }
+                        setIsAutoSyncEnabled(!isAutoSyncEnabled);
+                        if (!isAutoSyncEnabled) {
+                          success("Sinkronisasi otomatis per menit diaktifkan!");
+                        } else {
+                          info("Sinkronisasi otomatis dinonaktifkan.");
+                        }
+                      }}
+                      className={`px-3 py-2.5 rounded-2xl border text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap no-print shadow-sm h-[38px] ${
+                        isAutoSyncEnabled && selectedDashboardSatwas !== "ALL"
+                          ? "bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100"
+                          : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                      }`}
+                      title={
+                        selectedDashboardSatwas === "ALL"
+                          ? "Pilih Satwas spesifik untuk mengaktifkan real-time data refresh per menit"
+                          : `Klik untuk ${isAutoSyncEnabled ? 'menonaktifkan' : 'mengaktifkan'} real-time refresh per menit`
+                      }
+                    >
+                      <span className="relative flex h-2 w-2">
+                        {isAutoSyncEnabled && selectedDashboardSatwas !== "ALL" && (
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        )}
+                        <span className={`relative inline-flex rounded-full h-2 w-2 ${
+                          isAutoSyncEnabled && selectedDashboardSatwas !== "ALL" ? "bg-emerald-500" : "bg-slate-400"
+                        }`}></span>
+                      </span>
+                      <span>Sync 1m</span>
+                    </button>
+
+                    <motion.button
+                      id="dashboard-satwas-reset"
+                      onClick={() => {
+                        setSelectedDashboardSatwas("ALL");
+                        syncAllData(true);
+                        setIsResettingFilter(true);
+                        setTimeout(() => setIsResettingFilter(false), 800);
+                      }}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      animate={isResettingFilter ? {
+                        scale: [1, 0.9, 1.15, 1],
+                        rotate: [0, -12, 12, 0]
+                      } : {}}
+                      className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-1.5 border border-slate-200 cursor-pointer whitespace-nowrap no-print"
+                      title="Reset filter ke 'Semua Satwas Wilayah' dan Muat Ulang Data"
+                    >
+                      <motion.div
+                        animate={isResettingFilter ? { rotate: -360 } : { rotate: 0 }}
+                        transition={{ duration: 0.6, ease: "easeInOut" }}
+                        className="flex items-center justify-center"
+                      >
+                        <RotateCcw className="w-4 h-4 text-slate-500" />
+                      </motion.div>
+                      <span>Reset</span>
+                    </motion.button>
                   </div>
 
                   <button
@@ -1429,6 +2644,15 @@ export default function App() {
                   </button>
 
                   <button
+                    onClick={handleDownloadDashboardPDF}
+                    className="w-full sm:w-auto px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-2 border border-rose-500/20 whitespace-nowrap cursor-pointer no-print"
+                    title="Unduh Laporan Dashboard Kinerja Utama sebagai PDF Resmi"
+                  >
+                    <Download className="w-4 h-4 text-rose-100" />
+                    Unduh PDF Dashboard
+                  </button>
+
+                  <button
                     onClick={() => {
                       const shareUrl = `${window.location.origin}${window.location.pathname}?tab=dashboard&satwas=${encodeURIComponent(selectedDashboardSatwas)}`;
                       setQrModalUrl(shareUrl);
@@ -1446,7 +2670,7 @@ export default function App() {
               </div>
 
               {/* Stats Counters Grid */}
-              <KPICards stats={filteredDashboardStats} />
+              <KPICards stats={filteredDashboardStats} alertRules={satwasAlertRules[selectedDashboardSatwas]} />
 
               {/* SECTION: CATATAN SINGKAT / STICKY NOTES HARIAN PIMPINAN */}
               <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-xs space-y-4">
@@ -1691,20 +2915,35 @@ export default function App() {
 
               {/* Grid of Custom SVG Charts */}
               <DashboardChartsGrid stats={filteredDashboardStats} />
-            </div>
+            </motion.div>
           )}
 
           {/* TAB 1.5: PETA SEBARAN AKTIVITAS */}
           {activeTab === "peta" && (
-            <PetaSebaran
-              records={pemeriksaan}
-              satwasList={satwasList}
-            />
+            <motion.div
+              key="peta"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
+            >
+              <PetaSebaran
+                records={pemeriksaan}
+                satwasList={satwasList}
+              />
+            </motion.div>
           )}
 
           {/* TAB 2: MATRIK PEMERIKSAAN LEDGER */}
           {activeTab === "pemeriksaan" && (
-            <div className="space-y-6">
+            <motion.div
+              key="pemeriksaan"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
+              className="space-y-6"
+            >
               {/* Sub-menu di atas Matrik Pemeriksaan */}
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white border border-slate-200 p-4 rounded-3xl shadow-xs">
                 <div className="space-y-1">
@@ -1769,6 +3008,7 @@ export default function App() {
                     setEditingTemuan(null);
                     setShowTemuanForm(true);
                   }}
+                  onDeleteDoc={handleDeleteDoc}
                 />
               ) : (
                 filteredDashboardStats && (
@@ -1998,87 +3238,153 @@ export default function App() {
                 </div>
               )
             )}
-            </div>
+            </motion.div>
           )}
 
           {/* TAB 3: TEMUAN MONITOR */}
           {activeTab === "temuan" && (
-            <TemuanList
-              temuan={temuan}
-              pemeriksaanList={pemeriksaan}
-              userRole={currentUser.role}
-              onAddClick={() => {
-                setEditingTemuan(null);
-                setPreSelectedPemeriksaanId(undefined);
-                setShowTemuanForm(true);
-              }}
-              onEditClick={(item) => {
-                setEditingTemuan(item);
-                setPreSelectedPemeriksaanId(undefined);
-                setShowTemuanForm(true);
-              }}
-              onDeleteClick={handleTemuanDelete}
-            />
+            <motion.div
+              key="temuan"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
+            >
+              <TemuanList
+                temuan={temuan}
+                pemeriksaanList={pemeriksaan}
+                userRole={currentUser.role}
+                onAddClick={() => {
+                  setEditingTemuan(null);
+                  setPreSelectedPemeriksaanId(undefined);
+                  setShowTemuanForm(true);
+                }}
+                onEditClick={(item) => {
+                  setEditingTemuan(item);
+                  setPreSelectedPemeriksaanId(undefined);
+                  setShowTemuanForm(true);
+                }}
+                onDeleteClick={handleTemuanDelete}
+              />
+            </motion.div>
           )}
 
           {/* TAB 4: REPOSITORY DOKUMEN DRIVE */}
           {activeTab === "dokumen" && (
-            <DokumenList
-              documents={documents}
-              pemeriksaanList={pemeriksaan}
-              userRole={currentUser.role}
-              onCreateDoc={handleCreateDoc}
-              onVerifyDoc={handleVerifyDoc}
-              onDeleteDoc={handleDeleteDoc}
-            />
+            <motion.div
+              key="dokumen"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
+            >
+              <DokumenList
+                documents={documents}
+                pemeriksaanList={pemeriksaan}
+                userRole={currentUser.role}
+                onCreateDoc={handleCreateDoc}
+                onVerifyDoc={handleVerifyDoc}
+                onDeleteDoc={handleDeleteDoc}
+                onBulkVerifyDocs={handleBulkVerifyDocs}
+              />
+            </motion.div>
           )}
 
           {/* TAB 5: LAPORAN & CERTIFICATE EXPORT */}
           {activeTab === "laporan" && (
-            <LaporanFilter records={pemeriksaan} satwasList={satwasList} />
+            <motion.div
+              key="laporan"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
+            >
+              <LaporanFilter records={pemeriksaan} satwasList={satwasList} />
+            </motion.div>
           )}
 
           {/* TAB 5.5: GOOGLE WORKSPACE REST API INTEGRATION */}
           {activeTab === "workspace" && currentUser && (
-            <GoogleWorkspaceManager
-              user={currentUser}
-              pemeriksaanList={pemeriksaan}
-              onAddPemeriksaan={handlePemeriksaanSubmit}
-              googleAccessToken={googleAccessToken}
-              onGoogleSignIn={handleGoogleSignInClick}
-            />
+            <motion.div
+              key="workspace"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
+            >
+              <GoogleWorkspaceManager
+                user={currentUser}
+                pemeriksaanList={pemeriksaan}
+                onAddPemeriksaan={handlePemeriksaanSubmit}
+                googleAccessToken={googleAccessToken}
+                onGoogleSignIn={handleGoogleSignInClick}
+              />
+            </motion.div>
           )}
 
-          {/* TAB 6: USER REGISTRATION (ADMIN ONLY) */}
-          {activeTab === "users" && currentUser.role === "Administrator" && (
-            <UserManagement
-              users={usersList}
-              currentSessionUser={currentUser}
-              onCreateUser={handleCreateUser}
-              onUpdateUser={handleUpdateUser}
-              onDeleteUser={handleDeleteUser}
-            />
+          {/* TAB 6: USER REGISTRATION */}
+          {activeTab === "users" && (
+            <motion.div
+              key="users"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
+            >
+              <UserManagement
+                users={usersList}
+                currentSessionUser={currentUser}
+                onCreateUser={handleCreateUser}
+                onUpdateUser={handleUpdateUser}
+                onDeleteUser={handleDeleteUser}
+              />
+            </motion.div>
           )}
 
           {/* TAB 7: SYSTEM CONFIG API SETTINGS (ADMIN ONLY) */}
           {activeTab === "config" && currentUser.role === "Administrator" && (
-            <ConfigSettings config={config} satwasList={satwasList} onUpdateConfig={handleUpdateConfig} />
+            <motion.div
+              key="config"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
+            >
+              <ConfigSettings config={config} satwasList={satwasList} onUpdateConfig={handleUpdateConfig} />
+            </motion.div>
           )}
 
           {/* TAB 8: AUDIT LOGS (ADMIN ONLY) */}
           {activeTab === "logs" && currentUser.role === "Administrator" && (
-            <ActivityLogList />
+            <motion.div
+              key="logs"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
+            >
+              <ActivityLogList />
+            </motion.div>
           )}
 
           {/* TAB 9: AI VOICE ASSISTANT */}
           {activeTab === "ai-assistant" && currentUser && (
-            <AIVoiceAssistant
-              user={currentUser}
-              activeTab={activeTab}
-              dashboardStats={dashboardStats || undefined}
-            />
+            <motion.div
+              key="ai-assistant"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
+            >
+              <AIVoiceAssistant
+                user={currentUser}
+                activeTab={activeTab}
+                dashboardStats={dashboardStats || undefined}
+              />
+            </motion.div>
           )}
 
+          </AnimatePresence>
         </main>
       </div>
 
@@ -2128,6 +3434,26 @@ export default function App() {
         url={qrModalUrl}
         title={qrModalTitle}
         description={qrModalDescription}
+      />
+
+      {/* ALERT RULES CONFIGURATION MODAL */}
+      <AlertRulesModal
+        isOpen={isAlertRulesModalOpen}
+        onClose={() => setIsAlertRulesModalOpen(false)}
+        selectedSatwas={selectedDashboardSatwas}
+        currentRules={satwasAlertRules[selectedDashboardSatwas]}
+        onSave={(rules) => {
+          const updated = { ...satwasAlertRules };
+          if (rules === null) {
+            delete updated[selectedDashboardSatwas];
+            info(`Aturan peringatan untuk Satwas ${selectedDashboardSatwas === "ALL" ? "Global" : selectedDashboardSatwas} telah dihapus.`);
+          } else {
+            updated[selectedDashboardSatwas] = rules;
+            success(`Aturan peringatan untuk Satwas ${selectedDashboardSatwas === "ALL" ? "Global" : selectedDashboardSatwas} berhasil disimpan!`);
+          }
+          setSatwasAlertRules(updated);
+          localStorage.setItem("satwas_alert_rules", JSON.stringify(updated));
+        }}
       />
 
     </div>

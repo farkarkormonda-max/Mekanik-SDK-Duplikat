@@ -17,7 +17,7 @@ import {
   Compass
 } from "lucide-react";
 import { User, UserRole } from "../types";
-import kepolisianKhususLogo from "../assets/images/polsus_badge_real_1782639227590.jpg";
+import kepolisianKhususLogo from "../assets/images/polsus_badge_real_1783821523353.jpg";
 
 interface SidebarProps {
   activeTab: string;
@@ -71,7 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user,
       id: "users",
       label: "Manajemen User",
       icon: Users,
-      roles: ["Administrator"],
+      roles: ["Administrator", "Kepala Stasiun", "Verifikator", "Satwas"],
     },
     {
       id: "logs",

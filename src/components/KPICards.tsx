@@ -18,6 +18,7 @@ import { DashboardStats } from "../types";
 
 interface KPICardsProps {
   stats: DashboardStats;
+  alertRules?: { minInspections?: number; maxBudgetVariance?: number; minCompliance?: number };
 }
 
 const formatRupiah = (value?: number) => {
@@ -30,9 +31,22 @@ const formatRupiah = (value?: number) => {
   }).format(value);
 };
 
-export const KPICards: React.FC<KPICardsProps> = ({ stats }) => {
+export const KPICards: React.FC<KPICardsProps> = ({ stats, alertRules }) => {
   const isCloseToPagu = (stats.persentasePenyerapan ?? 0) >= 90;
   const isOverPagu = (stats.persentasePenyerapan ?? 0) >= 100;
+
+  const minInspections = alertRules?.minInspections;
+  const maxBudgetVariance = alertRules?.maxBudgetVariance;
+  const minCompliance = alertRules?.minCompliance;
+
+  const isInspectionsAlert = minInspections !== undefined && minInspections > 0 && stats.totalPemeriksaan < minInspections;
+  const isComplianceAlert = minCompliance !== undefined && minCompliance > 0 && stats.rataRataNilai < minCompliance;
+  
+  // Deviasi anggaran: realisasi vs target
+  const actualBudgetVariance = stats.targetRealisasi > 0 
+    ? Math.round(Math.abs(stats.realisasiAnggaran - stats.targetRealisasi) / stats.targetRealisasi * 100) 
+    : 0;
+  const isBudgetVarianceAlert = maxBudgetVariance !== undefined && maxBudgetVariance > 0 && actualBudgetVariance > maxBudgetVariance;
 
   // Track order in state, persisting to localStorage
   const [perfOrder, setPerfOrder] = React.useState<string[]>(() => {
@@ -60,6 +74,7 @@ export const KPICards: React.FC<KPICardsProps> = ({ stats }) => {
   // Drag and Drop state variables
   const [draggedCardId, setDraggedCardId] = React.useState<string | null>(null);
   const [draggedCategory, setDraggedCategory] = React.useState<"perf" | "budget" | null>(null);
+  const [hoveredTrendIdx, setHoveredTrendIdx] = React.useState<number | null>(null);
 
   const handleDragStart = (id: string, category: "perf" | "budget") => {
     setDraggedCardId(id);
@@ -132,17 +147,23 @@ export const KPICards: React.FC<KPICardsProps> = ({ stats }) => {
       id: "realisasi",
       title: "Realisasi Anggaran",
       value: formatRupiah(stats.realisasiAnggaran),
-      desc: isOverPagu
+      desc: isBudgetVarianceAlert
+        ? `⚠️ Deviasi anggaran tinggi: ${actualBudgetVariance}% (Batas: ${maxBudgetVariance}%)`
+        : isOverPagu
         ? "Realisasi melebihi pagu anggaran!"
         : isCloseToPagu
         ? "Pengeluaran mendekati batas pagu"
         : "Dana Kerja yang Telah Diserap",
-      color: isOverPagu 
+      color: isBudgetVarianceAlert
+        ? "from-rose-100 to-rose-200 border-rose-400 text-rose-950 shadow-rose-200/40 animate-pulse font-bold"
+        : isOverPagu 
         ? "from-rose-50 to-rose-100/60 border-rose-300 text-rose-900 shadow-rose-100/50" 
         : isCloseToPagu 
         ? "from-amber-50 to-amber-100/60 border-amber-300 text-amber-900 shadow-amber-100/50" 
         : "from-emerald-50 to-emerald-100 border-emerald-200 text-emerald-800",
-      iconColor: isOverPagu 
+      iconColor: isBudgetVarianceAlert
+        ? "bg-rose-500/25 text-rose-900"
+        : isOverPagu 
         ? "bg-rose-500/20 text-rose-700" 
         : isCloseToPagu 
         ? "bg-amber-500/20 text-amber-700" 
@@ -203,9 +224,15 @@ export const KPICards: React.FC<KPICardsProps> = ({ stats }) => {
       id: "total",
       title: "Total Pemeriksaan",
       value: stats.totalPemeriksaan,
-      desc: "Keseluruhan Giat Pengawasan",
-      color: "from-sky-50 to-sky-100 border-sky-200 text-sky-800",
-      iconColor: "bg-sky-500/10 text-sky-700",
+      desc: isInspectionsAlert
+        ? `⚠️ Di bawah batas minimal (${minInspections} Giat)`
+        : "Keseluruhan Giat Pengawasan",
+      color: isInspectionsAlert
+        ? "from-rose-100 to-rose-200 border-rose-400 text-rose-950 shadow-rose-200/40 animate-pulse font-bold"
+        : "from-sky-50 to-sky-100 border-sky-200 text-sky-800",
+      iconColor: isInspectionsAlert
+        ? "bg-rose-500/25 text-rose-900"
+        : "bg-sky-500/10 text-sky-700",
       icon: FileCheck,
     },
     {
@@ -230,9 +257,15 @@ export const KPICards: React.FC<KPICardsProps> = ({ stats }) => {
       id: "avg",
       title: "Rata-rata Nilai",
       value: `${stats.rataRataNilai}%`,
-      desc: "Tingkat Kepatuhan Regional",
-      color: "from-violet-50 to-violet-100 border-violet-200 text-violet-800",
-      iconColor: "bg-violet-500/10 text-violet-700",
+      desc: isComplianceAlert
+        ? `⚠️ Di bawah target minimal (${minCompliance}%)`
+        : "Tingkat Kepatuhan Regional",
+      color: isComplianceAlert
+        ? "from-rose-100 to-rose-200 border-rose-400 text-rose-950 shadow-rose-200/40 animate-pulse font-bold"
+        : "from-violet-50 to-violet-100 border-violet-200 text-violet-800",
+      iconColor: isComplianceAlert
+        ? "bg-rose-500/25 text-rose-900"
+        : "bg-violet-500/10 text-violet-700",
       icon: Percent,
     },
     {
@@ -328,6 +361,276 @@ export const KPICards: React.FC<KPICardsProps> = ({ stats }) => {
               </motion.div>
             );
           })}
+        </div>
+      </div>
+
+      {/* Tren Ketaatan Bulanan Section */}
+      <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm space-y-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-slate-100">
+          <div className="space-y-1">
+            <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5 select-none">
+              <span className="w-1.5 h-3 bg-cyan-500 rounded-xs" />
+              Tren Persentase Ketaatan Pelaku Usaha (Bulanan)
+            </h3>
+            <p className="text-[10px] text-slate-400 font-semibold font-sans">
+              Analisis perbandingan persentase kepatuhan kualitatif (TAAT) tahun ini (2026) vs tahun lalu (2025) secara bulanan
+            </p>
+          </div>
+
+          {/* Quick Stats Panel */}
+          {(() => {
+            const trendData = stats.chartKetaatanTrend ?? [];
+            const avgIni = trendData.length > 0 ? Number((trendData.reduce((acc, curr) => acc + curr.tahunIni, 0) / trendData.length).toFixed(1)) : 0;
+            const avgLalu = trendData.length > 0 ? Number((trendData.reduce((acc, curr) => acc + curr.tahunLalu, 0) / trendData.length).toFixed(1)) : 0;
+            const diffAvg = Number((avgIni - avgLalu).toFixed(1));
+
+            return (
+              <div className="flex items-center gap-4 bg-slate-50 border border-slate-200/60 p-3 rounded-2xl">
+                <div>
+                  <span className="block text-[8px] font-black uppercase text-slate-450 tracking-wider">Rata-Rata Ketaatan</span>
+                  <div className="flex items-baseline gap-2 mt-0.5">
+                    <span className="text-sm font-extrabold text-slate-800 font-mono">{avgIni}% <span className="text-[10px] text-slate-400 font-sans font-normal">Tahun Ini</span></span>
+                    <span className="text-[10px] text-slate-450 font-mono">vs {avgLalu}% <span className="text-[9px] text-slate-400 font-sans font-normal">Tahun Lalu</span></span>
+                  </div>
+                </div>
+
+                <div className="border-l border-slate-200 h-8 self-center" />
+
+                <div className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl font-bold text-[10px] ${
+                  diffAvg >= 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"
+                }`}>
+                  {diffAvg >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                  <span>{diffAvg >= 0 ? `+${diffAvg}%` : `${diffAvg}%`} Trend</span>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* SVG Comparative Chart Area */}
+        {(() => {
+          const trendData = stats.chartKetaatanTrend ?? [];
+          if (trendData.length === 0) {
+            return <div className="text-center text-slate-400 py-6 text-xs font-semibold">Memuat data tren ketaatan...</div>;
+          }
+
+          const width = 600;
+          const height = 200;
+          const paddingLeft = 45;
+          const paddingRight = 20;
+          const paddingTop = 20;
+          const paddingBottom = 35;
+
+          const pointsIni = trendData.map((d, idx) => {
+            const x = paddingLeft + (idx * (width - paddingLeft - paddingRight)) / (trendData.length - 1);
+            const y = height - paddingBottom - (d.tahunIni / 100) * (height - paddingTop - paddingBottom);
+            return { x, y, val: d.tahunIni, label: d.bulan };
+          });
+
+          const pointsLalu = trendData.map((d, idx) => {
+            const x = paddingLeft + (idx * (width - paddingLeft - paddingRight)) / (trendData.length - 1);
+            const y = height - paddingBottom - (d.tahunLalu / 100) * (height - paddingTop - paddingBottom);
+            return { x, y, val: d.tahunLalu, label: d.bulan };
+          });
+
+          const pathIniD = `M ${pointsIni[0].x} ${pointsIni[0].y} ` + pointsIni.slice(1).map(p => `L ${p.x} ${p.y}`).join(" ");
+          const pathLaluD = `M ${pointsLalu[0].x} ${pointsLalu[0].y} ` + pointsLalu.slice(1).map(p => `L ${p.x} ${p.y}`).join(" ");
+          const areaIniD = `${pathIniD} L ${pointsIni[pointsIni.length-1].x} ${height - paddingBottom} L ${pointsIni[0].x} ${height - paddingBottom} Z`;
+
+          const gridTicks = [0, 25, 50, 75, 100];
+
+          return (
+            <div className="relative w-full h-56">
+              <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible">
+                <defs>
+                  <linearGradient id="ketaatanIniGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.25" />
+                    <stop offset="100%" stopColor="#06b6d4" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+
+                {/* Y-Axis Grid Lines */}
+                {gridTicks.map((tick, idx) => {
+                  const y = height - paddingBottom - (tick / 100) * (height - paddingTop - paddingBottom);
+                  return (
+                    <g key={idx}>
+                      <line
+                        x1={paddingLeft}
+                        y1={y}
+                        x2={width - paddingRight}
+                        y2={y}
+                        stroke="#f1f5f9"
+                        strokeWidth="1"
+                        strokeDasharray={tick === 0 ? "0" : "4 4"}
+                      />
+                      <text x={paddingLeft - 8} y={y + 3} textAnchor="end" className="text-[9px] font-bold font-mono fill-slate-400">
+                        {tick}%
+                      </text>
+                    </g>
+                  );
+                })}
+
+                {/* Fill area for This Year */}
+                <path d={areaIniD} fill="url(#ketaatanIniGrad)" />
+
+                {/* Line Path for Last Year (2025) - Dashed Grey Line */}
+                <motion.path
+                  d={pathLaluD}
+                  fill="none"
+                  stroke="#94a3b8"
+                  strokeWidth="1.8"
+                  strokeDasharray="4 4"
+                  strokeLinecap="round"
+                  initial={{ pathLength: 0 }}
+                  animate={{ pathLength: 1 }}
+                  transition={{ duration: 1, ease: "easeInOut" }}
+                />
+
+                {/* Line Path for This Year (2026) - Solid Teal/Cyan Line */}
+                <motion.path
+                  d={pathIniD}
+                  fill="none"
+                  stroke="#06b6d4"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  initial={{ pathLength: 0 }}
+                  animate={{ pathLength: 1 }}
+                  transition={{ duration: 1, ease: "easeInOut", delay: 0.1 }}
+                />
+
+                {/* Interaction Bars & Markers */}
+                {trendData.map((d, idx) => {
+                  const x = paddingLeft + (idx * (width - paddingLeft - paddingRight)) / (trendData.length - 1);
+                  const nextX = idx < trendData.length - 1
+                    ? paddingLeft + ((idx + 1) * (width - paddingLeft - paddingRight)) / (trendData.length - 1)
+                    : x;
+                  const prevX = idx > 0
+                    ? paddingLeft + ((idx - 1) * (width - paddingLeft - paddingRight)) / (trendData.length - 1)
+                    : x;
+                  const triggerWidth = (nextX - prevX) / 2 || 20;
+
+                  return (
+                    <g key={idx}>
+                      {/* Vertical line indicator on hover */}
+                      {hoveredTrendIdx === idx && (
+                        <line
+                          x1={x}
+                          y1={paddingTop}
+                          x2={x}
+                          y2={height - paddingBottom}
+                          stroke="#cbd5e1"
+                          strokeWidth="1.2"
+                          strokeDasharray="2 2"
+                        />
+                      )}
+
+                      {/* Dots on points for Last Year */}
+                      <circle
+                        cx={x}
+                        cy={pointsLalu[idx].y}
+                        r={hoveredTrendIdx === idx ? 4.5 : 2.5}
+                        fill="#94a3b8"
+                        stroke="#fff"
+                        strokeWidth="1.5"
+                        className="transition-all duration-150"
+                      />
+
+                      {/* Dots on points for This Year */}
+                      <circle
+                        cx={x}
+                        cy={pointsIni[idx].y}
+                        r={hoveredTrendIdx === idx ? 5.5 : 3.5}
+                        fill="#06b6d4"
+                        stroke="#fff"
+                        strokeWidth="2"
+                        className="transition-all duration-150"
+                      />
+
+                      {/* Invisible rect for smooth hover triggering */}
+                      <rect
+                        x={x - triggerWidth}
+                        y={paddingTop}
+                        width={triggerWidth * 2}
+                        height={height - paddingTop - paddingBottom}
+                        fill="transparent"
+                        className="cursor-pointer"
+                        onMouseEnter={() => setHoveredTrendIdx(idx)}
+                        onMouseLeave={() => setHoveredTrendIdx(null)}
+                      />
+                    </g>
+                  );
+                })}
+              </svg>
+
+              {/* Floating Tooltip Panel */}
+              {hoveredTrendIdx !== null && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: -5 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 text-white p-3.5 rounded-2xl shadow-xl border border-slate-800 z-30 min-w-[200px] backdrop-blur-xs flex flex-col gap-1.5"
+                >
+                  <div className="flex justify-between items-center border-b border-slate-800 pb-1.5">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                      {["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"][hoveredTrendIdx]}
+                    </span>
+                    {(() => {
+                      const item = trendData[hoveredTrendIdx];
+                      const diff = Number((item.tahunIni - item.tahunLalu).toFixed(1));
+                      return (
+                        <span className={`text-[8px] font-black px-2 py-0.5 rounded-full font-mono flex items-center gap-0.5 ${
+                          diff >= 0 ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
+                        }`}>
+                          {diff >= 0 ? `+${diff}%` : `${diff}%`}
+                        </span>
+                      );
+                    })()}
+                  </div>
+
+                  <div className="space-y-1 font-semibold text-[10px]">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Tahun Ini (2026):</span>
+                      <span className="font-mono font-bold text-cyan-400">{trendData[hoveredTrendIdx].tahunIni}% Kepatuhan</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Tahun Lalu (2025):</span>
+                      <span className="font-mono font-bold text-slate-300">{trendData[hoveredTrendIdx].tahunLalu}% Kepatuhan</span>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* X-Axis Labels Below SVG */}
+        {(() => {
+          const trendData = stats.chartKetaatanTrend ?? [];
+          return (
+            <div className="flex justify-between pl-[45px] pr-[20px] text-[9px] font-bold font-mono text-slate-400 select-none border-t border-slate-50 pt-3">
+              {trendData.map((d, idx) => (
+                <span
+                  key={idx}
+                  className={`w-6 text-center transition-colors ${
+                    hoveredTrendIdx === idx ? "text-cyan-600 font-extrabold" : ""
+                  }`}
+                >
+                  {d.bulan}
+                </span>
+              ))}
+            </div>
+          );
+        })()}
+
+        {/* Chart Legend */}
+        <div className="flex justify-center gap-6 text-[10px] font-bold text-slate-500 pt-1">
+          <div className="flex items-center gap-1.5 select-none">
+            <span className="w-4 h-1.5 bg-cyan-500 rounded-full inline-block" />
+            <span>Tahun Ini (Giat 2026)</span>
+          </div>
+          <div className="flex items-center gap-1.5 select-none">
+            <span className="w-4 h-1.5 border-t-2 border-dashed border-slate-400 inline-block" />
+            <span>Tahun Lalu (Evaluasi 2025)</span>
+          </div>
         </div>
       </div>
 
