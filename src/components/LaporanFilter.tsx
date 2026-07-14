@@ -599,7 +599,7 @@ export const LaporanFilter: React.FC<LaporanFilterProps> = ({ records, satwasLis
               <h4 className="text-[11px] font-extrabold uppercase text-slate-800 tracking-wider mt-7 mb-2.5 border-l-2 border-sky-800 pl-2 text-left">
                 II. MATRIKS DETAIL PENILAIAN & NILAI TOTAL PEMERIKSAAN
               </h4>
-              <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <div className="border border-slate-200 rounded-lg overflow-x-auto">
                 <table className="w-full text-left border-collapse text-[10px]">
                   <thead>
                     <tr className="bg-slate-100 text-slate-600 font-black uppercase tracking-wider border-b border-slate-200">

@@ -117,9 +117,11 @@ export default function App() {
   const [lastSyncedTime, setLastSyncedTime] = useState<string>("");
   const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
 
-  const [selectedDashboardSatwas, setSelectedDashboardSatwas] = useState<string>("ALL");
+  const [selectedDashboardSatwas, setSelectedDashboardSatwas] = useState<string[]>(["ALL"]);
   const [isResettingFilter, setIsResettingFilter] = useState(false);
   const [isAutoSyncEnabled, setIsAutoSyncEnabled] = useState(false);
+  
+  const activeAlertRuleKey = selectedDashboardSatwas.length === 1 ? selectedDashboardSatwas[0] : "ALL";
   
   // Searchable dropdown states
   const [isSatwasDropdownOpen, setIsSatwasDropdownOpen] = useState(false);
@@ -170,19 +172,32 @@ export default function App() {
     return counts;
   }, [pemeriksaan, documents, temuan, satwasList]);
 
+  // Total alert count for the selected satwas
+  const totalAlertsForSelected = useMemo(() => {
+    if (selectedDashboardSatwas.includes("ALL")) {
+      return satwasAlertCounts["ALL"] || 0;
+    }
+    return selectedDashboardSatwas.reduce((acc, sat) => acc + (satwasAlertCounts[sat] || 0), 0);
+  }, [selectedDashboardSatwas, satwasAlertCounts]);
+
   // Tooltip info for selected satwas
   const selectedSatwasTooltipInfo = useMemo(() => {
-    const matchingSatwas = satwasList.find(s => s.nama_satwas === selectedDashboardSatwas);
-    const fullName = selectedDashboardSatwas === "ALL" 
+    const isAll = selectedDashboardSatwas.includes("ALL");
+    const matchingSatwas = isAll ? null : satwasList.find(s => selectedDashboardSatwas.includes(s.nama_satwas));
+    const fullName = isAll 
       ? "Semua Satwas Wilayah Kerja" 
-      : (matchingSatwas ? matchingSatwas.nama_satwas : selectedDashboardSatwas);
-    const wilayah = selectedDashboardSatwas === "ALL"
+      : (selectedDashboardSatwas.length === 1 
+          ? selectedDashboardSatwas[0] 
+          : `Perbandingan (${selectedDashboardSatwas.length} Satwas)`);
+    const wilayah = isAll
       ? "Stasiun PSDKP Biak beserta seluruh Satuan Pengawasan (Satwas) di bawahnya"
-      : (matchingSatwas ? matchingSatwas.wilayah : "Wilayah Kerja Operasional");
+      : (selectedDashboardSatwas.length === 1 && matchingSatwas 
+          ? matchingSatwas.wilayah 
+          : `${selectedDashboardSatwas.join(", ")}`);
 
-    const filtered = selectedDashboardSatwas === "ALL"
+    const filtered = isAll
       ? pemeriksaan
-      : pemeriksaan.filter(p => p.satwas === selectedDashboardSatwas);
+      : pemeriksaan.filter(p => selectedDashboardSatwas.includes(p.satwas));
 
     const currentYear = 2026; // or new Date().getFullYear()
     const inspectionsCountThisYear = filtered.filter(p => p.tanggal && p.tanggal.startsWith(String(currentYear))).length;
@@ -231,7 +246,7 @@ export default function App() {
     if (!dashboardStats) return null;
     
     // If "ALL" is selected, return the dashboard stats with summed config if present
-    if (selectedDashboardSatwas === "ALL") {
+    if (selectedDashboardSatwas.includes("ALL")) {
       if (config?.TARGET_SATWAS) {
         let sumPagu = 0;
         let sumTarget = 0;
@@ -260,7 +275,7 @@ export default function App() {
     }
 
     // Otherwise, filter examinations by selected satwas
-    const filteredPems = pemeriksaan ? pemeriksaan.filter(p => p.satwas === selectedDashboardSatwas) : [];
+    const filteredPems = pemeriksaan ? pemeriksaan.filter(p => selectedDashboardSatwas.includes(p.satwas)) : [];
     
     // Recalculate statistics for the selected satwas
     const totalPemeriksaan = filteredPems.length;
@@ -307,12 +322,17 @@ export default function App() {
       { name: "Tidak Taat", value: totalTidakTaat },
     ];
 
-    // Satwas representation for the chosen Satwas only
-    const chartNilaiSatwas = [{
-      satwas: selectedDashboardSatwas,
-      rataRata: rataRataNilai,
-      jumlah: totalPemeriksaan
-    }];
+    // Satwas representation for comparing chosen Satwas
+    const chartNilaiSatwas = selectedDashboardSatwas.map(satName => {
+      const satPems = pemeriksaan ? pemeriksaan.filter(p => p.satwas === satName) : [];
+      const satTotal = satPems.length;
+      const satSum = satPems.reduce((acc, p) => acc + (Number(p.nilai_total) || 0), 0);
+      return {
+        satwas: satName,
+        rataRata: satTotal > 0 ? Number((satSum / satTotal).toFixed(2)) : 0,
+        jumlah: satTotal
+      };
+    });
 
     const chartTrendTahunan = [
       { tahun: "2024", rataRata: 75.2 },
@@ -346,69 +366,86 @@ export default function App() {
     });
 
     // Recalculate Budget specifically for this Satwas based on custom settings or proportion
-    const hasSpecificConfig = config?.TARGET_SATWAS && config.TARGET_SATWAS[selectedDashboardSatwas] !== undefined;
-
     let paguVal = 0;
     let targetVal = 0;
     let realisasiVal = 0;
     let targetQ1 = 0, targetQ2 = 0, targetQ3 = 0, targetQ4 = 0;
     let realisasiQ1 = 0, realisasiQ2 = 0, realisasiQ3 = 0, realisasiQ4 = 0;
 
-    if (hasSpecificConfig) {
-      const satwasConfig = config.TARGET_SATWAS[selectedDashboardSatwas];
-      paguVal = Number(satwasConfig.pagu) || 0;
-      targetVal = Number(satwasConfig.target) || 0;
-      realisasiVal = Number(satwasConfig.realisasi) || 0;
+    selectedDashboardSatwas.forEach((satName) => {
+      const hasSpecificConfig = config?.TARGET_SATWAS && config.TARGET_SATWAS[satName] !== undefined;
+      let satPagu = 0, satTarget = 0, satRealisasi = 0;
+      let satTQ1 = 0, satTQ2 = 0, satTQ3 = 0, satTQ4 = 0;
+      let satRQ1 = 0, satRQ2 = 0, satRQ3 = 0, satRQ4 = 0;
 
-      // Split quarterly values proportionally using the overall quarterly settings
-      const totalOverallTarget = config.TARGET_REALISASI || 1000000000;
-      const totalOverallReal = config.REALISASI_ANGGARAN || 825000000;
+      if (hasSpecificConfig) {
+        const satwasConfig = config.TARGET_SATWAS[satName];
+        satPagu = Number(satwasConfig.pagu) || 0;
+        satTarget = Number(satwasConfig.target) || 0;
+        satRealisasi = Number(satwasConfig.realisasi) || 0;
 
-      const q1TargetProp = (config.TARGET_Q1 ?? 250000000) / totalOverallTarget;
-      const q2TargetProp = (config.TARGET_Q2 ?? 250000000) / totalOverallTarget;
-      const q3TargetProp = (config.TARGET_Q3 ?? 250000000) / totalOverallTarget;
-      const q4TargetProp = (config.TARGET_Q4 ?? 250000000) / totalOverallTarget;
+        // Split quarterly values proportionally using the overall quarterly settings
+        const totalOverallTarget = config.TARGET_REALISASI || 1000000000;
+        const totalOverallReal = config.REALISASI_ANGGARAN || 825000000;
 
-      const q1RealProp = (config.REALISASI_Q1 ?? 220000000) / totalOverallReal;
-      const q2RealProp = (config.REALISASI_Q2 ?? 230000000) / totalOverallReal;
-      const q3RealProp = (config.REALISASI_Q3 ?? 200000000) / totalOverallReal;
-      const q4RealProp = (config.REALISASI_Q4 ?? 175000000) / totalOverallReal;
+        const q1TargetProp = (config.TARGET_Q1 ?? 250000000) / totalOverallTarget;
+        const q2TargetProp = (config.TARGET_Q2 ?? 250000000) / totalOverallTarget;
+        const q3TargetProp = (config.TARGET_Q3 ?? 250000000) / totalOverallTarget;
+        const q4TargetProp = (config.TARGET_Q4 ?? 250000000) / totalOverallTarget;
 
-      targetQ1 = Math.round(targetVal * q1TargetProp);
-      targetQ2 = Math.round(targetVal * q2TargetProp);
-      targetQ3 = Math.round(targetVal * q3TargetProp);
-      targetQ4 = Math.round(targetVal * q4TargetProp);
+        const q1RealProp = (config.REALISASI_Q1 ?? 220000000) / totalOverallReal;
+        const q2RealProp = (config.REALISASI_Q2 ?? 230000000) / totalOverallReal;
+        const q3RealProp = (config.REALISASI_Q3 ?? 200000000) / totalOverallReal;
+        const q4RealProp = (config.REALISASI_Q4 ?? 175000000) / totalOverallReal;
 
-      realisasiQ1 = Math.round(realisasiVal * q1RealProp);
-      realisasiQ2 = Math.round(realisasiVal * q2RealProp);
-      realisasiQ3 = Math.round(realisasiVal * q3RealProp);
-      realisasiQ4 = Math.round(realisasiVal * q4RealProp);
-    } else {
-      const budgetShareMap: Record<string, number> = {
-        "Stasiun PSDKP Biak": 0.40,
-        "Satwas SDKP Manokwari": 0.20,
-        "Satwas SDKP Jayapura": 0.25,
-        "Satwas SDK Nabire": 0.15,
-      };
+        satTQ1 = Math.round(satTarget * q1TargetProp);
+        satTQ2 = Math.round(satTarget * q2TargetProp);
+        satTQ3 = Math.round(satTarget * q3TargetProp);
+        satTQ4 = Math.round(satTarget * q4TargetProp);
 
-      const share = budgetShareMap[selectedDashboardSatwas] !== undefined 
-        ? budgetShareMap[selectedDashboardSatwas] 
-        : 0.20;
+        satRQ1 = Math.round(satRealisasi * q1RealProp);
+        satRQ2 = Math.round(satRealisasi * q2RealProp);
+        satRQ3 = Math.round(satRealisasi * q3RealProp);
+        satRQ4 = Math.round(satRealisasi * q4RealProp);
+      } else {
+        const budgetShareMap: Record<string, number> = {
+          "Stasiun PSDKP Biak": 0.40,
+          "Satwas SDKP Manokwari": 0.20,
+          "Satwas SDKP Jayapura": 0.25,
+          "Satwas SDK Nabire": 0.15,
+        };
 
-      paguVal = Math.round((dashboardStats.paguAnggaran || 1250000000) * share);
-      targetVal = Math.round((dashboardStats.targetRealisasi || 1000000000) * share);
-      realisasiVal = Math.round((dashboardStats.realisasiAnggaran || 825000000) * share);
+        const share = budgetShareMap[satName] !== undefined 
+          ? budgetShareMap[satName] 
+          : 0.20;
 
-      targetQ1 = Math.round((dashboardStats.targetQ1 ?? 250000000) * share);
-      targetQ2 = Math.round((dashboardStats.targetQ2 ?? 250000000) * share);
-      targetQ3 = Math.round((dashboardStats.targetQ3 ?? 250000000) * share);
-      targetQ4 = Math.round((dashboardStats.targetQ4 ?? 250000000) * share);
+        satPagu = Math.round((dashboardStats.paguAnggaran || 1250000000) * share);
+        satTarget = Math.round((dashboardStats.targetRealisasi || 1000000000) * share);
+        satRealisasi = Math.round((dashboardStats.realisasiAnggaran || 825000000) * share);
 
-      realisasiQ1 = Math.round((dashboardStats.realisasiQ1 ?? 220000000) * share);
-      realisasiQ2 = Math.round((dashboardStats.realisasiQ2 ?? 230000000) * share);
-      realisasiQ3 = Math.round((dashboardStats.realisasiQ3 ?? 200000000) * share);
-      realisasiQ4 = Math.round((dashboardStats.realisasiQ4 ?? 175000000) * share);
-    }
+        satTQ1 = Math.round((dashboardStats.targetQ1 ?? 250000000) * share);
+        satTQ2 = Math.round((dashboardStats.targetQ2 ?? 250000000) * share);
+        satTQ3 = Math.round((dashboardStats.targetQ3 ?? 250000000) * share);
+        satTQ4 = Math.round((dashboardStats.targetQ4 ?? 250000000) * share);
+
+        satRQ1 = Math.round((dashboardStats.realisasiQ1 ?? 220000000) * share);
+        satRQ2 = Math.round((dashboardStats.realisasiQ2 ?? 230000000) * share);
+        satRQ3 = Math.round((dashboardStats.realisasiQ3 ?? 200000000) * share);
+        satRQ4 = Math.round((dashboardStats.realisasiQ4 ?? 175000000) * share);
+      }
+
+      paguVal += satPagu;
+      targetVal += satTarget;
+      realisasiVal += satRealisasi;
+      targetQ1 += satTQ1;
+      targetQ2 += satTQ2;
+      targetQ3 += satTQ3;
+      targetQ4 += satTQ4;
+      realisasiQ1 += satRQ1;
+      realisasiQ2 += satRQ2;
+      realisasiQ3 += satRQ3;
+      realisasiQ4 += satRQ4;
+    });
 
     const sisaVal = paguVal - realisasiVal;
     const persentaseVal = paguVal > 0 ? Number(((realisasiVal / paguVal) * 100).toFixed(2)) : 0;
@@ -464,7 +501,7 @@ export default function App() {
       setActiveTab(tabParam);
     }
     if (satwasParam) {
-      setSelectedDashboardSatwas(satwasParam);
+      setSelectedDashboardSatwas(satwasParam.split(","));
     }
 
     const savedUser = localStorage.getItem("sdkp_user_session");
@@ -542,7 +579,7 @@ export default function App() {
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
 
-    if (isAutoSyncEnabled && selectedDashboardSatwas !== "ALL") {
+    if (isAutoSyncEnabled && !selectedDashboardSatwas.includes("ALL")) {
       intervalId = setInterval(() => {
         syncAllData(false, true);
       }, 60 * 1000);
@@ -557,7 +594,7 @@ export default function App() {
 
   // Turn off auto refresh if user resets back to ALL
   useEffect(() => {
-    if (selectedDashboardSatwas === "ALL") {
+    if (selectedDashboardSatwas.includes("ALL")) {
       setIsAutoSyncEnabled(false);
     }
   }, [selectedDashboardSatwas]);
@@ -839,7 +876,7 @@ export default function App() {
     }
 
     const stats = filteredDashboardStats;
-    const shareName = selectedDashboardSatwas === "ALL" ? "Semua Wilayah" : selectedDashboardSatwas;
+    const shareName = selectedDashboardSatwas.includes("ALL") ? "Semua Wilayah" : selectedDashboardSatwas.join(", ");
     
     // Hitung persentase triwulan
     const pctQ1 = stats.targetQ1 > 0 ? ((stats.realisasiQ1 / stats.targetQ1) * 100).toFixed(2) : "0.00";
@@ -904,16 +941,17 @@ export default function App() {
   };
 
   const handleDownloadSatwasCSV = () => {
-    const filtered = selectedDashboardSatwas === "ALL"
+    const isAll = selectedDashboardSatwas.includes("ALL");
+    const filtered = isAll
       ? pemeriksaan
-      : pemeriksaan.filter(p => p.satwas === selectedDashboardSatwas);
+      : pemeriksaan.filter(p => selectedDashboardSatwas.includes(p.satwas));
 
     if (filtered.length === 0) {
-      error(`Tidak ada data pemeriksaan untuk wilayah ${selectedDashboardSatwas === "ALL" ? "Semua Satwas" : selectedDashboardSatwas} yang dapat diekspor.`);
+      error(`Tidak ada data pemeriksaan untuk wilayah ${isAll ? "Semua Satwas" : selectedDashboardSatwas.join(", ")} yang dapat diekspor.`);
       return;
     }
 
-    const shareName = selectedDashboardSatwas === "ALL" ? "Semua Wilayah Satwas" : selectedDashboardSatwas;
+    const shareName = isAll ? "Semua Wilayah Satwas" : selectedDashboardSatwas.join(", ");
 
     const csvRows = [
       ["Laporan Pemeriksaan dan Kepatuhan SDKP 2026"],
@@ -1006,7 +1044,7 @@ export default function App() {
     });
 
     const stats = filteredDashboardStats;
-    const shareName = selectedDashboardSatwas === "ALL" ? "Seluruh Wilayah Satwas" : selectedDashboardSatwas;
+    const shareName = selectedDashboardSatwas.includes("ALL") ? "Seluruh Wilayah Satwas" : selectedDashboardSatwas.join(", ");
     const currentDateStr = new Date().toLocaleDateString("id-ID", {
       year: "numeric",
       month: "long",
@@ -1290,7 +1328,7 @@ export default function App() {
     });
 
     const stats = filteredDashboardStats;
-    const shareName = selectedDashboardSatwas === "ALL" ? "Seluruh Wilayah Satwas" : selectedDashboardSatwas;
+    const shareName = selectedDashboardSatwas.includes("ALL") ? "Seluruh Wilayah Satwas" : selectedDashboardSatwas.join(", ");
     const currentDateStr = new Date().toLocaleDateString("id-ID", {
       year: "numeric",
       month: "long",
@@ -1519,7 +1557,7 @@ export default function App() {
     
     doc.setFont("helvetica", "bold");
     doc.text(
-      selectedDashboardSatwas === "ALL" 
+      selectedDashboardSatwas.includes("ALL") 
         ? "Kepala Stasiun PSDKP Biak," 
         : `Koordinator ${shareName},`, 
       stampX, 
@@ -2267,7 +2305,7 @@ export default function App() {
                   LAPORAN PENGAWASAN, KETAATAN PELAKU USAHA & KINERJA ANGGARAN TIMJA SDK
                 </h3>
                 <p className="text-center text-[10px] text-slate-500 font-bold mt-0.5 font-mono">
-                  Wilayah Kerja Terfilter: {selectedDashboardSatwas === "ALL" ? "Seluruh Wilayah Satwas" : selectedDashboardSatwas}
+                  Wilayah Kerja Terfilter: {selectedDashboardSatwas.includes("ALL") ? "Seluruh Wilayah Satwas" : selectedDashboardSatwas.join(", ")}
                 </p>
               </div>
 
@@ -2320,353 +2358,7 @@ export default function App() {
                 </div>
               ) : null}
 
-              {/* Filter Satwas Wilayah */}
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white border border-slate-200 p-5 rounded-3xl shadow-xs">
-                <div className="space-y-1">
-                  <h3 className="text-sm font-black text-slate-850 flex items-center gap-2">
-                    <span className="w-1.5 h-4 bg-sky-500 rounded-xs inline-block" />
-                    Penyaringan Wilayah Kerja (Satwas)
-                  </h3>
-                  <p className="text-[10px] text-slate-400 font-semibold font-sans">
-                    Lihat statistik performa ketaatan dan alokasi anggaran spesifik per wilayah kerja satwas
-                  </p>
-                </div>
-                
-                <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
-                  <div className="w-full sm:w-auto flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                    <div ref={satwasDropdownRef} className="relative flex-1 min-w-[200px]">
-                      {/* Trigger Button with id="dashboard-satwas-filter" */}
-                      <motion.button
-                        id="dashboard-satwas-filter"
-                        onClick={() => {
-                          setIsSatwasDropdownOpen(!isSatwasDropdownOpen);
-                          setSatwasSearchQuery(""); // clear query on open/toggle
-                        }}
-                        animate={isResettingFilter ? {
-                          scale: [1, 1.04, 0.96, 1.01, 1],
-                          rotate: [0, -1.5, 1.5, -0.8, 0],
-                          borderColor: ["#e2e8f0", "#06b6d4", "#06b6d4", "#e2e8f0"],
-                          boxShadow: [
-                            "0 0 0 0 rgba(6, 182, 212, 0)",
-                            "0 0 0 8px rgba(6, 182, 212, 0.25)",
-                            "0 0 0 4px rgba(6, 182, 212, 0.15)",
-                            "0 0 0 0 rgba(6, 182, 212, 0)"
-                          ]
-                        } : {}}
-                        transition={{ duration: 0.6, ease: "easeInOut" }}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-xs font-extrabold text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all cursor-pointer flex items-center justify-between gap-2"
-                      >
-                        <div className="flex items-center gap-2 truncate">
-                          <span className="truncate">
-                            {selectedDashboardSatwas === "ALL" 
-                              ? "Semua Satwas Wilayah" 
-                              : selectedDashboardSatwas}
-                          </span>
-                          {satwasAlertCounts[selectedDashboardSatwas] > 0 && (
-                            <span className="bg-rose-550 bg-rose-500 text-white font-black px-2 py-0.5 text-[9px] rounded-lg animate-pulse shrink-0 whitespace-nowrap">
-                              {satwasAlertCounts[selectedDashboardSatwas]} Aktif
-                            </span>
-                          )}
-                          <div 
-                            className="relative inline-block"
-                            onMouseEnter={() => setIsFilterTooltipOpen(true)}
-                            onMouseLeave={() => setIsFilterTooltipOpen(false)}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 transition-colors cursor-help shrink-0" />
-                            <AnimatePresence>
-                              {isFilterTooltipOpen && (
-                                <motion.div
-                                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                  className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-64 bg-slate-900 text-slate-100 p-3 rounded-xl shadow-xl border border-slate-800 z-50 text-[10px] space-y-1.5 pointer-events-none text-left"
-                                >
-                                  <div className="font-extrabold text-white border-b border-slate-800 pb-1 flex items-center gap-1.5 uppercase tracking-wider">
-                                    <span className="w-1.5 h-1.5 bg-sky-400 rounded-full inline-block animate-pulse" />
-                                    Info Wilayah Kerja
-                                  </div>
-                                  <div className="space-y-1 font-sans text-xs">
-                                    <div>
-                                      <span className="text-slate-400 text-[10px] font-bold block uppercase tracking-wide">Nama Lengkap:</span>
-                                      <span className="font-extrabold text-slate-200 block text-xs leading-tight">{selectedSatwasTooltipInfo.fullName}</span>
-                                    </div>
-                                    <div>
-                                      <span className="text-slate-400 text-[10px] font-bold block uppercase tracking-wide">Cakupan Wilayah:</span>
-                                      <span className="font-semibold text-slate-300 block text-[11px] leading-tight">{selectedSatwasTooltipInfo.wilayah}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center border-t border-slate-800/60 pt-1.5 mt-1.5">
-                                      <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wide">Pemeriksaan 2026:</span>
-                                      <span className="font-black text-sky-400 text-xs">{selectedSatwasTooltipInfo.inspectionsCountThisYear} Kegiatan</span>
-                                    </div>
-                                    <div className="flex justify-between items-center">
-                                      <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wide">Pembaruan:</span>
-                                      <span className="font-mono text-emerald-400 text-[11px]">{selectedSatwasTooltipInfo.lastUpdateStr}</span>
-                                    </div>
-                                  </div>
-                                  <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-l-transparent border-r-4 border-r-transparent border-t-4 border-t-slate-900" />
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-                          </div>
-                          <span
-                            role="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDownloadSatwasCSV();
-                            }}
-                            className="bg-sky-50 hover:bg-sky-100 active:bg-sky-200 text-sky-700 p-1 rounded-lg transition-colors flex items-center justify-center shrink-0 ml-1 cursor-pointer border border-sky-100/60 shadow-sm no-print"
-                            title="Ekspor Data Pemeriksaan ke CSV"
-                          >
-                            <Download className="w-3.5 h-3.5 text-sky-600" />
-                          </span>
-                          <span
-                            role="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDownloadSatwasPDF();
-                            }}
-                            className="bg-teal-50 hover:bg-teal-100 active:bg-teal-200 text-teal-750 p-1 rounded-lg transition-colors flex items-center justify-center shrink-0 ml-1 cursor-pointer border border-teal-100/60 shadow-sm no-print"
-                            title="Unduh Ringkasan Kinerja Satwas (PDF)"
-                          >
-                            <FileText className="w-3.5 h-3.5 text-teal-600" />
-                          </span>
-                        </div>
-                        <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform duration-200 ${isSatwasDropdownOpen ? "rotate-180" : ""}`} />
-                      </motion.button>
 
-                      {/* Dropdown Popover */}
-                      <AnimatePresence>
-                        {isSatwasDropdownOpen && (
-                          <motion.div
-                            initial={{ opacity: 0, y: -8, scale: 0.95 }}
-                            animate={{ opacity: 1, y: 4, scale: 1 }}
-                            exit={{ opacity: 0, y: -8, scale: 0.95 }}
-                            transition={{ duration: 0.15, ease: "easeOut" }}
-                            className="absolute z-50 left-0 right-0 bg-white border border-slate-200 rounded-2xl shadow-xl p-2.5 space-y-2 mt-1 max-h-72 flex flex-col overflow-hidden"
-                          >
-                            {/* Search Box */}
-                            <div className="relative flex items-center bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 focus-within:ring-2 focus-within:ring-sky-500/20 focus-within:border-sky-500 transition-all">
-                              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 mr-1.5" />
-                              <input
-                                type="text"
-                                placeholder="Cari wilayah satwas..."
-                                value={satwasSearchQuery}
-                                onChange={(e) => setSatwasSearchQuery(e.target.value)}
-                                className="w-full bg-transparent border-none text-xs text-slate-700 placeholder-slate-400 focus:outline-none py-0.5 font-extrabold"
-                                autoFocus
-                              />
-                              {satwasSearchQuery && (
-                                <button 
-                                  onClick={() => setSatwasSearchQuery("")}
-                                  className="text-slate-400 hover:text-slate-600 transition-colors p-0.5"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              )}
-                            </div>
-
-                            {/* Options List */}
-                            <div className="overflow-y-auto flex-1 space-y-0.5 pr-1 max-h-48 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
-                              {/* Option: "Semua Satwas Wilayah" */}
-                              <button
-                                onClick={() => {
-                                  setSelectedDashboardSatwas("ALL");
-                                  setIsSatwasDropdownOpen(false);
-                                }}
-                                className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
-                                  selectedDashboardSatwas === "ALL"
-                                    ? "bg-sky-50 text-sky-700"
-                                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-800"
-                                }`}
-                              >
-                                <div className="flex items-center gap-2 truncate">
-                                  <span>Semua Satwas Wilayah</span>
-                                  {satwasAlertCounts["ALL"] > 0 && (
-                                    <span className="bg-rose-500/10 text-rose-600 text-[9px] px-1.5 py-0.5 rounded-full font-black">
-                                      {satwasAlertCounts["ALL"]} Aktif
-                                    </span>
-                                  )}
-                                </div>
-                                {selectedDashboardSatwas === "ALL" && (
-                                  <Check className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                                )}
-                              </button>
-
-                              {/* Map Satwas List */}
-                              {satwasList
-                                .filter((sat) => 
-                                  sat.nama_satwas.toLowerCase().includes(satwasSearchQuery.toLowerCase())
-                                )
-                                .map((sat) => (
-                                  <button
-                                    key={sat.id}
-                                    onClick={() => {
-                                      setSelectedDashboardSatwas(sat.nama_satwas);
-                                      setIsSatwasDropdownOpen(false);
-                                    }}
-                                    className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
-                                      selectedDashboardSatwas === sat.nama_satwas
-                                        ? "bg-sky-50 text-sky-700"
-                                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-800"
-                                    }`}
-                                  >
-                                    <div className="flex items-center gap-2 truncate">
-                                      <span className="truncate">{sat.nama_satwas}</span>
-                                      {satwasAlertCounts[sat.nama_satwas] > 0 && (
-                                        <span className="bg-rose-500/10 text-rose-600 text-[9px] px-1.5 py-0.5 rounded-full font-black">
-                                          {satwasAlertCounts[sat.nama_satwas]} Aktif
-                                        </span>
-                                      )}
-                                    </div>
-                                    {selectedDashboardSatwas === sat.nama_satwas && (
-                                      <Check className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                                    )}
-                                  </button>
-                                ))}
-
-                              {satwasList.filter((sat) => 
-                                sat.nama_satwas.toLowerCase().includes(satwasSearchQuery.toLowerCase())
-                              ).length === 0 && (
-                                <div className="text-center py-4 text-[10px] font-bold text-slate-400 font-sans">
-                                  Tidak ada satwas ditemukan
-                                </div>
-                              )}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-
-                    {/* Alert Rules Setting Button */}
-                    <button
-                      onClick={() => setIsAlertRulesModalOpen(true)}
-                      className={`px-3 py-2.5 rounded-2xl border text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap no-print shadow-sm h-[38px] ${
-                        satwasAlertRules[selectedDashboardSatwas] && 
-                        (satwasAlertRules[selectedDashboardSatwas].minInspections || 
-                         satwasAlertRules[selectedDashboardSatwas].maxBudgetVariance || 
-                         satwasAlertRules[selectedDashboardSatwas].minCompliance)
-                          ? "bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100"
-                          : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
-                      }`}
-                      title={`Klik untuk mengatur ambang batas peringatan Satwas (${selectedDashboardSatwas === "ALL" ? "Global" : selectedDashboardSatwas})`}
-                    >
-                      <Sliders className="w-4 h-4 text-slate-500" />
-                      <span>Alert Rules</span>
-                      {satwasAlertRules[selectedDashboardSatwas] && 
-                       (satwasAlertRules[selectedDashboardSatwas].minInspections || 
-                        satwasAlertRules[selectedDashboardSatwas].maxBudgetVariance || 
-                        satwasAlertRules[selectedDashboardSatwas].minCompliance) ? (
-                        <span className="w-2 h-2 rounded-full bg-rose-500 block animate-pulse" />
-                      ) : null}
-                    </button>
-
-                    {/* Sync every minute Toggle Button */}
-                    <button
-                      onClick={() => {
-                        if (selectedDashboardSatwas === "ALL") {
-                          warning("Silakan pilih salah satu wilayah Satwas spesifik terlebih dahulu untuk mengaktifkan sinkronisasi otomatis per menit!");
-                          return;
-                        }
-                        setIsAutoSyncEnabled(!isAutoSyncEnabled);
-                        if (!isAutoSyncEnabled) {
-                          success("Sinkronisasi otomatis per menit diaktifkan!");
-                        } else {
-                          info("Sinkronisasi otomatis dinonaktifkan.");
-                        }
-                      }}
-                      className={`px-3 py-2.5 rounded-2xl border text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap no-print shadow-sm h-[38px] ${
-                        isAutoSyncEnabled && selectedDashboardSatwas !== "ALL"
-                          ? "bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100"
-                          : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
-                      }`}
-                      title={
-                        selectedDashboardSatwas === "ALL"
-                          ? "Pilih Satwas spesifik untuk mengaktifkan real-time data refresh per menit"
-                          : `Klik untuk ${isAutoSyncEnabled ? 'menonaktifkan' : 'mengaktifkan'} real-time refresh per menit`
-                      }
-                    >
-                      <span className="relative flex h-2 w-2">
-                        {isAutoSyncEnabled && selectedDashboardSatwas !== "ALL" && (
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        )}
-                        <span className={`relative inline-flex rounded-full h-2 w-2 ${
-                          isAutoSyncEnabled && selectedDashboardSatwas !== "ALL" ? "bg-emerald-500" : "bg-slate-400"
-                        }`}></span>
-                      </span>
-                      <span>Sync 1m</span>
-                    </button>
-
-                    <motion.button
-                      id="dashboard-satwas-reset"
-                      onClick={() => {
-                        setSelectedDashboardSatwas("ALL");
-                        syncAllData(true);
-                        setIsResettingFilter(true);
-                        setTimeout(() => setIsResettingFilter(false), 800);
-                      }}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      animate={isResettingFilter ? {
-                        scale: [1, 0.9, 1.15, 1],
-                        rotate: [0, -12, 12, 0]
-                      } : {}}
-                      className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-1.5 border border-slate-200 cursor-pointer whitespace-nowrap no-print"
-                      title="Reset filter ke 'Semua Satwas Wilayah' dan Muat Ulang Data"
-                    >
-                      <motion.div
-                        animate={isResettingFilter ? { rotate: -360 } : { rotate: 0 }}
-                        transition={{ duration: 0.6, ease: "easeInOut" }}
-                        className="flex items-center justify-center"
-                      >
-                        <RotateCcw className="w-4 h-4 text-slate-500" />
-                      </motion.div>
-                      <span>Reset</span>
-                    </motion.button>
-                  </div>
-
-                  <button
-                    onClick={handleDownloadCSV}
-                    className="w-full sm:w-auto px-4 py-2.5 bg-sky-500 hover:bg-sky-600 active:bg-sky-700 text-white font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-2 border border-sky-400/20 whitespace-nowrap cursor-pointer no-print"
-                  >
-                    <Download className="w-4 h-4 text-sky-100" />
-                    Unduh Data
-                  </button>
-
-                  <button
-                    onClick={() => window.print()}
-                    className="w-full sm:w-auto px-4 py-2.5 bg-slate-800 hover:bg-slate-900 active:bg-slate-950 text-white font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-2 border border-slate-700 whitespace-nowrap cursor-pointer no-print"
-                    title="Cetak Laporan Dashboard Kinerja Utama"
-                  >
-                    <Printer className="w-4 h-4 text-cyan-400" />
-                    Cetak Dashboard
-                  </button>
-
-                  <button
-                    onClick={handleDownloadDashboardPDF}
-                    className="w-full sm:w-auto px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-2 border border-rose-500/20 whitespace-nowrap cursor-pointer no-print"
-                    title="Unduh Laporan Dashboard Kinerja Utama sebagai PDF Resmi"
-                  >
-                    <Download className="w-4 h-4 text-rose-100" />
-                    Unduh PDF Dashboard
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      const shareUrl = `${window.location.origin}${window.location.pathname}?tab=dashboard&satwas=${encodeURIComponent(selectedDashboardSatwas)}`;
-                      setQrModalUrl(shareUrl);
-                      setQrModalTitle(`Dashboard Kinerja - ${selectedDashboardSatwas === "ALL" ? "Semua Satwas" : selectedDashboardSatwas}`);
-                      setQrModalDescription(`Laporan kinerja pemantauan, ketaatan pelaku usaha, dan indeks kinerja utama Timja SDK untuk wilayah kerja ${selectedDashboardSatwas === "ALL" ? "Semua Satwas Wilayah" : selectedDashboardSatwas}.`);
-                      setQrModalOpen(true);
-                    }}
-                    className="w-full sm:w-auto px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 active:bg-cyan-800 text-white font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-2 border border-cyan-500/20 whitespace-nowrap cursor-pointer no-print"
-                    title="Buat Kode QR untuk Tampilan Ini"
-                  >
-                    <QrCode className="w-4 h-4 text-cyan-100" />
-                    QR Akses
-                  </button>
-                </div>
-              </div>
 
               {/* Stats Counters Grid */}
               <KPICards stats={filteredDashboardStats} alertRules={satwasAlertRules[selectedDashboardSatwas]} />
@@ -2914,6 +2606,441 @@ export default function App() {
 
               {/* Grid of Custom SVG Charts */}
               <DashboardChartsGrid stats={filteredDashboardStats} />
+
+              {/* Filter Satwas Wilayah */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white border border-slate-200 p-5 rounded-3xl shadow-xs">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-black text-slate-850 flex items-center gap-2">
+                    <span className="w-1.5 h-4 bg-sky-500 rounded-xs inline-block" />
+                    Penyaringan Wilayah Kerja (Satwas)
+                  </h3>
+                  <p className="text-[10px] text-slate-400 font-semibold font-sans">
+                    Lihat statistik performa ketaatan dan alokasi anggaran spesifik per wilayah kerja satwas
+                  </p>
+                </div>
+                
+                <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                  <div className="w-full sm:w-auto flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                    <div ref={satwasDropdownRef} className="relative flex-1 min-w-[200px]">
+                      {/* Trigger Button with id="dashboard-satwas-filter" */}
+                      <motion.button
+                        id="dashboard-satwas-filter"
+                        onClick={() => {
+                          setIsSatwasDropdownOpen(!isSatwasDropdownOpen);
+                          setSatwasSearchQuery(""); // clear query on open/toggle
+                        }}
+                        animate={isResettingFilter ? {
+                          scale: [1, 1.04, 0.96, 1.01, 1],
+                          rotate: [0, -1.5, 1.5, -0.8, 0],
+                          borderColor: ["#e2e8f0", "#06b6d4", "#06b6d4", "#e2e8f0"],
+                          boxShadow: [
+                            "0 0 0 0 rgba(6, 182, 212, 0)",
+                            "0 0 0 8px rgba(6, 182, 212, 0.25)",
+                            "0 0 0 4px rgba(6, 182, 212, 0.15)",
+                            "0 0 0 0 rgba(6, 182, 212, 0)"
+                          ]
+                        } : {}}
+                        transition={{ duration: 0.6, ease: "easeInOut" }}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-xs font-extrabold text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition-all cursor-pointer flex items-center justify-between gap-2"
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <span className="truncate">
+                            {selectedDashboardSatwas.includes("ALL") 
+                              ? "Semua Satwas Wilayah" 
+                              : selectedDashboardSatwas.join(", ")}
+                          </span>
+                          {totalAlertsForSelected > 0 && (
+                            <span className="bg-rose-550 bg-rose-500 text-white font-black px-2 py-0.5 text-[9px] rounded-lg animate-pulse shrink-0 whitespace-nowrap">
+                              {totalAlertsForSelected} Aktif
+                            </span>
+                          )}
+                          <div 
+                            className="relative inline-block"
+                            onMouseEnter={() => setIsFilterTooltipOpen(true)}
+                            onMouseLeave={() => setIsFilterTooltipOpen(false)}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 transition-colors cursor-help shrink-0" />
+                            <AnimatePresence>
+                              {isFilterTooltipOpen && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                  className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-64 bg-slate-900 text-slate-100 p-3 rounded-xl shadow-xl border border-slate-800 z-50 text-[10px] space-y-1.5 pointer-events-none text-left"
+                                >
+                                  <div className="font-extrabold text-white border-b border-slate-800 pb-1 flex items-center gap-1.5 uppercase tracking-wider">
+                                    <span className="w-1.5 h-1.5 bg-sky-400 rounded-full inline-block animate-pulse" />
+                                    Info Wilayah Kerja
+                                  </div>
+                                  <div className="space-y-1 font-sans text-xs">
+                                    <div>
+                                      <span className="text-slate-400 text-[10px] font-bold block uppercase tracking-wide">Nama Lengkap:</span>
+                                      <span className="font-extrabold text-slate-200 block text-xs leading-tight">{selectedSatwasTooltipInfo.fullName}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-slate-400 text-[10px] font-bold block uppercase tracking-wide">Cakupan Wilayah:</span>
+                                      <span className="font-semibold text-slate-300 block text-[11px] leading-tight">{selectedSatwasTooltipInfo.wilayah}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center border-t border-slate-800/60 pt-1.5 mt-1.5">
+                                      <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wide">Pemeriksaan 2026:</span>
+                                      <span className="font-black text-sky-400 text-xs">{selectedSatwasTooltipInfo.inspectionsCountThisYear} Kegiatan</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wide">Pembaruan:</span>
+                                      <span className="font-mono text-emerald-400 text-[11px]">{selectedSatwasTooltipInfo.lastUpdateStr}</span>
+                                    </div>
+                                  </div>
+                                  <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-l-transparent border-r-4 border-r-transparent border-t-4 border-t-slate-900" />
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                          <span
+                            role="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadSatwasCSV();
+                            }}
+                            className="bg-sky-50 hover:bg-sky-100 active:bg-sky-200 text-sky-700 p-1 rounded-lg transition-colors flex items-center justify-center shrink-0 ml-1 cursor-pointer border border-sky-100/60 shadow-sm no-print"
+                            title="Ekspor Data Pemeriksaan ke CSV"
+                          >
+                            <Download className="w-3.5 h-3.5 text-sky-600" />
+                          </span>
+                          <span
+                            role="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadSatwasPDF();
+                            }}
+                            className="bg-teal-50 hover:bg-teal-100 active:bg-teal-200 text-teal-750 p-1 rounded-lg transition-colors flex items-center justify-center shrink-0 ml-1 cursor-pointer border border-teal-100/60 shadow-sm no-print"
+                            title="Unduh Ringkasan Kinerja Satwas (PDF)"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-teal-600" />
+                          </span>
+                        </div>
+                        <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform duration-200 ${isSatwasDropdownOpen ? "rotate-180" : ""}`} />
+                      </motion.button>
+
+                      {/* Dropdown Popover */}
+                      <AnimatePresence>
+                        {isSatwasDropdownOpen && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 4, scale: 1 }}
+                            exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                            transition={{ duration: 0.15, ease: "easeOut" }}
+                            className="absolute z-50 left-0 right-0 bg-white border border-slate-200 rounded-2xl shadow-xl p-2.5 space-y-2 mt-1 max-h-72 flex flex-col overflow-hidden"
+                          >
+                            {/* Search Box */}
+                            <div className="relative flex items-center bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 focus-within:ring-2 focus-within:ring-sky-500/20 focus-within:border-sky-500 transition-all">
+                              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 mr-1.5" />
+                              <input
+                                type="text"
+                                placeholder="Cari wilayah satwas..."
+                                value={satwasSearchQuery}
+                                onChange={(e) => setSatwasSearchQuery(e.target.value)}
+                                className="w-full bg-transparent border-none text-xs text-slate-700 placeholder-slate-400 focus:outline-none py-0.5 font-extrabold"
+                                autoFocus
+                              />
+                              {satwasSearchQuery && (
+                                <button 
+                                  onClick={() => setSatwasSearchQuery("")}
+                                  className="text-slate-400 hover:text-slate-600 transition-colors p-0.5"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Options List */}
+                            <div className="overflow-y-auto flex-1 space-y-0.5 pr-1 max-h-48 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+                              {/* Option: "Select All" */}
+                              <button
+                                onClick={() => {
+                                  const isAllSelected = selectedDashboardSatwas.includes("ALL");
+                                  if (isAllSelected) {
+                                    // Toggle off Select All -> select just the first Satwas as fallback
+                                    const fallback = satwasList.length > 0 ? [satwasList[0].nama_satwas] : ["ALL"];
+                                    setSelectedDashboardSatwas(fallback);
+                                    info(`Memilih Satwas ${satwasList[0]?.nama_satwas || ""} (Minimal satu Satwas harus terpilih)`);
+                                  } else {
+                                    setSelectedDashboardSatwas(["ALL"]);
+                                  }
+                                }}
+                                className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
+                                  selectedDashboardSatwas.includes("ALL")
+                                    ? "bg-sky-50 text-sky-700"
+                                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-800"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 truncate">
+                                  <motion.div
+                                    initial={false}
+                                    animate={selectedDashboardSatwas.includes("ALL") ? "checked" : "unchecked"}
+                                    variants={{
+                                      unchecked: { scale: 1, backgroundColor: "#ffffff", borderColor: "#cbd5e1" },
+                                      checked: { scale: [1, 0.85, 1.1, 1], backgroundColor: "#0ea5e9", borderColor: "#0ea5e9" }
+                                    }}
+                                    transition={{ duration: 0.25, ease: "easeInOut" }}
+                                    className="w-4 h-4 rounded-md border flex items-center justify-center shrink-0 shadow-xs"
+                                  >
+                                    <svg
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="4"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      className="w-3 h-3 text-white"
+                                    >
+                                      <motion.path
+                                        d="M20 6L9 17l-5-5"
+                                        variants={{
+                                          unchecked: { pathLength: 0, opacity: 0 },
+                                          checked: { pathLength: 1, opacity: 1 }
+                                        }}
+                                        transition={{ duration: 0.2, ease: "easeOut" }}
+                                      />
+                                    </svg>
+                                  </motion.div>
+                                  <span>Semua Satwas Wilayah (Select All)</span>
+                                  {satwasAlertCounts["ALL"] > 0 && (
+                                    <span className="bg-rose-550/10 text-rose-600 text-[9px] px-1.5 py-0.5 rounded-full font-black">
+                                      {satwasAlertCounts["ALL"]} Aktif
+                                    </span>
+                                  )}
+                                </div>
+                                {selectedDashboardSatwas.includes("ALL") && (
+                                  <Check className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                                )}
+                              </button>
+
+                              {/* Map Satwas List */}
+                              {satwasList
+                                .filter((sat) => 
+                                  sat.nama_satwas.toLowerCase().includes(satwasSearchQuery.toLowerCase())
+                                )
+                                .map((sat) => {
+                                  const isAllSelected = selectedDashboardSatwas.includes("ALL");
+                                  const isSelected = isAllSelected || selectedDashboardSatwas.includes(sat.nama_satwas);
+                                  return (
+                                    <button
+                                      key={sat.id}
+                                      onClick={() => {
+                                        let newSelection;
+                                        if (isSelected) {
+                                          if (isAllSelected) {
+                                            // Since it was "ALL" and now we deselect one, we select all EXCEPT this one
+                                            newSelection = satwasList
+                                              .map(s => s.nama_satwas)
+                                              .filter(name => name !== sat.nama_satwas);
+                                          } else {
+                                            newSelection = selectedDashboardSatwas.filter(item => item !== sat.nama_satwas);
+                                          }
+                                        } else {
+                                          newSelection = [...selectedDashboardSatwas.filter(item => item !== "ALL"), sat.nama_satwas];
+                                        }
+                                        
+                                        // If empty or all are selected, fallback to ["ALL"]
+                                        const finalSelection = (newSelection.length === 0 || newSelection.length === satwasList.length)
+                                          ? ["ALL"]
+                                          : newSelection;
+                                          
+                                        setSelectedDashboardSatwas(finalSelection);
+                                      }}
+                                      className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
+                                        isSelected
+                                          ? "bg-sky-50 text-sky-700"
+                                          : "text-slate-600 hover:bg-slate-50 hover:text-slate-800"
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-2 truncate">
+                                        <motion.div
+                                          initial={false}
+                                          animate={isSelected ? "checked" : "unchecked"}
+                                          variants={{
+                                            unchecked: { scale: 1, backgroundColor: "#ffffff", borderColor: "#cbd5e1" },
+                                            checked: { scale: [1, 0.85, 1.1, 1], backgroundColor: "#0ea5e9", borderColor: "#0ea5e9" }
+                                          }}
+                                          transition={{ duration: 0.25, ease: "easeInOut" }}
+                                          className="w-4 h-4 rounded-md border flex items-center justify-center shrink-0 shadow-xs"
+                                        >
+                                          <svg
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="4"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            className="w-3 h-3 text-white"
+                                          >
+                                            <motion.path
+                                              d="M20 6L9 17l-5-5"
+                                              variants={{
+                                                unchecked: { pathLength: 0, opacity: 0 },
+                                                checked: { pathLength: 1, opacity: 1 }
+                                              }}
+                                              transition={{ duration: 0.2, ease: "easeOut" }}
+                                            />
+                                          </svg>
+                                        </motion.div>
+                                        <span className="truncate">{sat.nama_satwas}</span>
+                                        {satwasAlertCounts[sat.nama_satwas] > 0 && (
+                                          <span className="bg-rose-500/10 text-rose-600 text-[9px] px-1.5 py-0.5 rounded-full font-black">
+                                            {satwasAlertCounts[sat.nama_satwas]} Aktif
+                                          </span>
+                                        )}
+                                      </div>
+                                      {isSelected && (
+                                        <Check className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                                      )}
+                                    </button>
+                                  );
+                                })}
+
+                              {satwasList.filter((sat) => 
+                                sat.nama_satwas.toLowerCase().includes(satwasSearchQuery.toLowerCase())
+                              ).length === 0 && (
+                                <div className="text-center py-4 text-[10px] font-bold text-slate-400 font-sans">
+                                  Tidak ada satwas ditemukan
+                                </div>
+                              )}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+
+                    {/* Alert Rules Setting Button */}
+                    <button
+                      onClick={() => setIsAlertRulesModalOpen(true)}
+                      className={`px-3 py-2.5 rounded-2xl border text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap no-print shadow-sm h-[38px] ${
+                        satwasAlertRules[activeAlertRuleKey] && 
+                        (satwasAlertRules[activeAlertRuleKey].minInspections || 
+                         satwasAlertRules[activeAlertRuleKey].maxBudgetVariance || 
+                         satwasAlertRules[activeAlertRuleKey].minCompliance)
+                          ? "bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100"
+                          : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                      }`}
+                      title={`Klik untuk mengatur ambang batas peringatan Satwas (${selectedDashboardSatwas.includes("ALL") ? "Global" : selectedDashboardSatwas.join(", ")})`}
+                    >
+                      <Sliders className="w-4 h-4 text-slate-500" />
+                      <span>Alert Rules</span>
+                      {satwasAlertRules[activeAlertRuleKey] && 
+                       (satwasAlertRules[activeAlertRuleKey].minInspections || 
+                        satwasAlertRules[activeAlertRuleKey].maxBudgetVariance || 
+                        satwasAlertRules[activeAlertRuleKey].minCompliance) ? (
+                        <span className="w-2 h-2 rounded-full bg-rose-500 block animate-pulse" />
+                      ) : null}
+                    </button>
+
+                    {/* Sync every minute Toggle Button */}
+                    <button
+                      onClick={() => {
+                        if (selectedDashboardSatwas.includes("ALL")) {
+                          warning("Silakan pilih salah satu wilayah Satwas spesifik terlebih dahulu untuk mengaktifkan sinkronisasi otomatis per menit!");
+                          return;
+                        }
+                        setIsAutoSyncEnabled(!isAutoSyncEnabled);
+                        if (!isAutoSyncEnabled) {
+                          success("Sinkronisasi otomatis per menit diaktifkan!");
+                        } else {
+                          info("Sinkronisasi otomatis dinonaktifkan.");
+                        }
+                      }}
+                      className={`px-3 py-2.5 rounded-2xl border text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap no-print shadow-sm h-[38px] ${
+                        isAutoSyncEnabled && !selectedDashboardSatwas.includes("ALL")
+                          ? "bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100"
+                          : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+                      }`}
+                      title={
+                        selectedDashboardSatwas.includes("ALL")
+                          ? "Pilih Satwas spesifik untuk mengaktifkan real-time data refresh per menit"
+                          : `Klik untuk ${isAutoSyncEnabled ? 'menonaktifkan' : 'mengaktifkan'} real-time refresh per menit`
+                      }
+                    >
+                      <span className="relative flex h-2 w-2">
+                        {isAutoSyncEnabled && !selectedDashboardSatwas.includes("ALL") && (
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        )}
+                        <span className={`relative inline-flex rounded-full h-2 w-2 ${
+                          isAutoSyncEnabled && !selectedDashboardSatwas.includes("ALL") ? "bg-emerald-500" : "bg-slate-400"
+                        }`}></span>
+                      </span>
+                      <span>Sync 1m</span>
+                    </button>
+
+                    <motion.button
+                      id="dashboard-satwas-reset"
+                      onClick={() => {
+                        setSelectedDashboardSatwas(["ALL"]);
+                        syncAllData(true);
+                        setIsResettingFilter(true);
+                        setTimeout(() => setIsResettingFilter(false), 800);
+                      }}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      animate={isResettingFilter ? {
+                        scale: [1, 0.9, 1.15, 1],
+                        rotate: [0, -12, 12, 0]
+                      } : {}}
+                      className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-1.5 border border-slate-200 cursor-pointer whitespace-nowrap no-print"
+                      title="Reset filter ke 'Semua Satwas Wilayah' dan Muat Ulang Data"
+                    >
+                      <motion.div
+                        animate={isResettingFilter ? { rotate: -360 } : { rotate: 0 }}
+                        transition={{ duration: 0.6, ease: "easeInOut" }}
+                        className="flex items-center justify-center"
+                      >
+                        <RotateCcw className="w-4 h-4 text-slate-500" />
+                      </motion.div>
+                      <span>Reset</span>
+                    </motion.button>
+                  </div>
+
+                  <button
+                    onClick={handleDownloadCSV}
+                    className="w-full sm:w-auto px-4 py-2.5 bg-sky-500 hover:bg-sky-600 active:bg-sky-700 text-white font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-2 border border-sky-400/20 whitespace-nowrap cursor-pointer no-print"
+                  >
+                    <Download className="w-4 h-4 text-sky-100" />
+                    Unduh Data
+                  </button>
+
+                  <button
+                    onClick={() => window.print()}
+                    className="w-full sm:w-auto px-4 py-2.5 bg-slate-800 hover:bg-slate-900 active:bg-slate-950 text-white font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-2 border border-slate-700 whitespace-nowrap cursor-pointer no-print"
+                    title="Cetak Laporan Dashboard Kinerja Utama"
+                  >
+                    <Printer className="w-4 h-4 text-cyan-400" />
+                    Cetak Dashboard
+                  </button>
+
+                  <button
+                    onClick={handleDownloadDashboardPDF}
+                    className="w-full sm:w-auto px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-2 border border-rose-500/20 whitespace-nowrap cursor-pointer no-print"
+                    title="Unduh Laporan Dashboard Kinerja Utama sebagai PDF Resmi"
+                  >
+                    <Download className="w-4 h-4 text-rose-100" />
+                    Unduh PDF Dashboard
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const shareUrl = `${window.location.origin}${window.location.pathname}?tab=dashboard&satwas=${encodeURIComponent(selectedDashboardSatwas.join(","))}`;
+                      setQrModalUrl(shareUrl);
+                      setQrModalTitle(`Dashboard Kinerja - ${selectedDashboardSatwas.includes("ALL") ? "Semua Satwas" : selectedDashboardSatwas.join(", ")}`);
+                      setQrModalDescription(`Laporan kinerja pemantauan, ketaatan pelaku usaha, dan indeks kinerja utama Timja SDK untuk wilayah kerja ${selectedDashboardSatwas.includes("ALL") ? "Semua Satwas Wilayah" : selectedDashboardSatwas.join(", ")}.`);
+                      setQrModalOpen(true);
+                    }}
+                    className="w-full sm:w-auto px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 active:bg-cyan-800 text-white font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-2 border border-cyan-500/20 whitespace-nowrap cursor-pointer no-print"
+                    title="Buat Kode QR untuk Tampilan Ini"
+                  >
+                    <QrCode className="w-4 h-4 text-cyan-100" />
+                    QR Akses
+                  </button>
+                </div>
+              </div>
             </motion.div>
           )}
 
@@ -3025,7 +3152,7 @@ export default function App() {
                         LAPORAN REALISASI & PENYERAPAN ANGGARAN DINAS - TIMJA SDK
                       </h3>
                       <p className="text-center text-[10px] text-slate-500 font-bold mt-0.5 font-mono">
-                        Wilayah Kerja Terfilter: {selectedDashboardSatwas === "ALL" ? "Seluruh Wilayah Satwas" : selectedDashboardSatwas}
+                        Wilayah Kerja Terfilter: {selectedDashboardSatwas.includes("ALL") ? "Seluruh Wilayah Satwas" : selectedDashboardSatwas.join(", ")}
                       </p>
                     </div>
 
@@ -3045,8 +3172,8 @@ export default function App() {
                         <div className="w-full sm:w-64">
                           <select
                             id="budget-satwas-filter"
-                            value={selectedDashboardSatwas}
-                            onChange={(e) => setSelectedDashboardSatwas(e.target.value)}
+                            value={selectedDashboardSatwas.includes("ALL") ? "ALL" : selectedDashboardSatwas[0]}
+                            onChange={(e) => setSelectedDashboardSatwas([e.target.value])}
                             className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-xs font-extrabold text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all cursor-pointer"
                           >
                             <option value="ALL">Semua Satwas Wilayah</option>
@@ -3077,10 +3204,10 @@ export default function App() {
 
                         <button
                           onClick={() => {
-                            const shareUrl = `${window.location.origin}${window.location.pathname}?tab=anggaran&satwas=${encodeURIComponent(selectedDashboardSatwas)}`;
+                            const shareUrl = `${window.location.origin}${window.location.pathname}?tab=anggaran&satwas=${encodeURIComponent(selectedDashboardSatwas.join(","))}`;
                             setQrModalUrl(shareUrl);
-                            setQrModalTitle(`Laporan Anggaran - ${selectedDashboardSatwas === "ALL" ? "Semua Satwas" : selectedDashboardSatwas}`);
-                            setQrModalDescription(`Laporan realisasi penyerapan anggaran, monitoring target per triwulan (Q1 - Q4) Timja SDK untuk wilayah kerja ${selectedDashboardSatwas === "ALL" ? "Semua Satwas Wilayah" : selectedDashboardSatwas}.`);
+                            setQrModalTitle(`Laporan Anggaran - ${selectedDashboardSatwas.includes("ALL") ? "Semua Satwas" : selectedDashboardSatwas.join(", ")}`);
+                            setQrModalDescription(`Laporan realisasi penyerapan anggaran, monitoring target per triwulan (Q1 - Q4) Timja SDK untuk wilayah kerja ${selectedDashboardSatwas.includes("ALL") ? "Semua Satwas Wilayah" : selectedDashboardSatwas.join(", ")}.`);
                             setQrModalOpen(true);
                           }}
                           className="w-full sm:w-auto px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 active:bg-cyan-800 text-white font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-2 border border-cyan-500/20 whitespace-nowrap cursor-pointer no-print"
@@ -3097,7 +3224,7 @@ export default function App() {
                         <div>
                           <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
                             <span className="w-1.5 h-4 bg-emerald-500 rounded-xs inline-block" />
-                            Pemantauan Penyerapan Anggaran per Triwulan (Q1 - Q4) - {selectedDashboardSatwas === "ALL" ? "Semua Wilayah" : selectedDashboardSatwas}
+                            Pemantauan Penyerapan Anggaran per Triwulan (Q1 - Q4) - {selectedDashboardSatwas.includes("ALL") ? "Semua Wilayah" : selectedDashboardSatwas.join(", ")}
                           </h3>
                           <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
                             Evaluasi akurasi realisasi penyerapan anggaran secara berjangka sepanjang tahun 2026
@@ -3425,16 +3552,16 @@ export default function App() {
       <AlertRulesModal
         isOpen={isAlertRulesModalOpen}
         onClose={() => setIsAlertRulesModalOpen(false)}
-        selectedSatwas={selectedDashboardSatwas}
-        currentRules={satwasAlertRules[selectedDashboardSatwas]}
+        selectedSatwas={activeAlertRuleKey}
+        currentRules={satwasAlertRules[activeAlertRuleKey]}
         onSave={(rules) => {
           const updated = { ...satwasAlertRules };
           if (rules === null) {
-            delete updated[selectedDashboardSatwas];
-            info(`Aturan peringatan untuk Satwas ${selectedDashboardSatwas === "ALL" ? "Global" : selectedDashboardSatwas} telah dihapus.`);
+            delete updated[activeAlertRuleKey];
+            info(`Aturan peringatan untuk Satwas ${activeAlertRuleKey === "ALL" ? "Global" : activeAlertRuleKey} telah dihapus.`);
           } else {
-            updated[selectedDashboardSatwas] = rules;
-            success(`Aturan peringatan untuk Satwas ${selectedDashboardSatwas === "ALL" ? "Global" : selectedDashboardSatwas} berhasil disimpan!`);
+            updated[activeAlertRuleKey] = rules;
+            success(`Aturan peringatan untuk Satwas ${activeAlertRuleKey === "ALL" ? "Global" : activeAlertRuleKey} berhasil disimpan!`);
           }
           setSatwasAlertRules(updated);
           localStorage.setItem("satwas_alert_rules", JSON.stringify(updated));

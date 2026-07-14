@@ -140,8 +140,8 @@ export const PemeriksaanForm: React.FC<PemeriksaanFormProps> = ({
   const isVerifikator = userRole === "Verifikator" && !initialRecord;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-4xl w-full p-6 animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-start sm:items-center justify-center p-4">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-4xl w-full p-6 my-auto animate-in fade-in zoom-in-95 duration-150">
         
         {/* Header */}
         <div className="flex items-center justify-between border-b pb-4 mb-6">

@@ -294,7 +294,7 @@ export const TrendTahunanChart: React.FC<LineChartProps> = ({ data }) => {
 interface AnggaranSatwasStackedBarChartProps {
   dashboardStats: any;
   satwasList: { id: string; nama_satwas: string; wilayah: string }[];
-  selectedSatwas: string;
+  selectedSatwas: string | string[];
   config?: any;
 }
 
@@ -486,7 +486,9 @@ export const AnggaranSatwasStackedBarChart: React.FC<AnggaranSatwasStackedBarCha
 
           {/* Grouped Bars per Satwas */}
           {satwasData.map((sat) => {
-            const isTargetSelected = selectedSatwas === "ALL" || selectedSatwas === sat.nama_satwas;
+            const isTargetSelected = typeof selectedSatwas === "string" 
+              ? (selectedSatwas === "ALL" || selectedSatwas === sat.nama_satwas)
+              : (selectedSatwas.includes("ALL") || selectedSatwas.includes(sat.nama_satwas));
             const targetHeightPercent = (sat.totalTarget / maxTotalVal) * 100;
             const realisasiHeightPercent = (sat.totalRealisasi / maxTotalVal) * 100;
 
@@ -622,7 +624,9 @@ export const AnggaranSatwasStackedBarChart: React.FC<AnggaranSatwasStackedBarCha
       {/* X-Axis labels below the chart */}
       <div className="flex justify-around pl-16 pt-2 border-t border-slate-100">
         {satwasData.map((sat) => {
-          const isTargetSelected = selectedSatwas === "ALL" || selectedSatwas === sat.nama_satwas;
+          const isTargetSelected = typeof selectedSatwas === "string" 
+            ? (selectedSatwas === "ALL" || selectedSatwas === sat.nama_satwas)
+            : (selectedSatwas.includes("ALL") || selectedSatwas.includes(sat.nama_satwas));
           return (
             <div
               key={sat.id}

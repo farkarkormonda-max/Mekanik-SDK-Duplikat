@@ -200,8 +200,8 @@ export const UserManagement: React.FC<UserManagementProps> = ({
 
       {/* Insert / Edit Dialog */}
       {showModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-start sm:items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 my-auto animate-in fade-in zoom-in-95 duration-150">
             <h3 className="text-lg font-bold text-slate-900 border-b pb-3 mb-4">
               {editingUser ? "Modifikasi Akun Personil" : "Pendaftaran Personil Baru"}
             </h3>

@@ -1249,8 +1249,8 @@ export const PemeriksaanList: React.FC<PemeriksaanListProps> = ({
         const relatedDocs = documentList.filter(d => d.pemeriksaan_id === r.id);
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col my-8">
+          <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col my-auto">
               
               {/* Modal Header */}
               <div className="bg-slate-50 border-b border-slate-100 px-6 py-4 flex items-center justify-between">
