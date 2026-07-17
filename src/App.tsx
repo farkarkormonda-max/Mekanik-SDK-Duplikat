@@ -33,7 +33,7 @@ import { AlertRulesModal } from "./components/AlertRulesModal";
 import { initAuth, googleSignIn, googleLogout } from "./lib/firebaseAuth";
 
 // Lucide icon helper for login
-import { Anchor, Lock, User as UserIcon, LogIn, ExternalLink, RefreshCw, RotateCcw, Chrome, ClipboardCheck, Wallet, AlertTriangle, Download, Pin, Plus, Trash2, Edit3, Check, X, StickyNote, Volume2, Sparkles, Play, Square, Loader2, WifiOff, Cloud, Printer, QrCode, Search, ChevronDown, Share2, Info, FileText, Eye, EyeOff, Sliders, Bell } from "lucide-react";
+import { Anchor, Lock, User as UserIcon, LogIn, ExternalLink, RefreshCw, RotateCcw, Chrome, ClipboardCheck, Wallet, AlertTriangle, Download, Pin, Plus, Trash2, Edit3, Check, X, StickyNote, Volume2, Sparkles, Play, Square, Loader2, WifiOff, Cloud, Printer, QrCode, Search, ChevronDown, Share2, Info, FileText, Eye, EyeOff, Sliders, Bell, Calendar } from "lucide-react";
 
 export default function App() {
   const { success, error, info, warning } = useToast();
@@ -118,6 +118,8 @@ export default function App() {
   const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
 
   const [selectedDashboardSatwas, setSelectedDashboardSatwas] = useState<string[]>(["ALL"]);
+  const [dashboardStartDate, setDashboardStartDate] = useState("");
+  const [dashboardEndDate, setDashboardEndDate] = useState("");
   const [isResettingFilter, setIsResettingFilter] = useState(false);
   const [isAutoSyncEnabled, setIsAutoSyncEnabled] = useState(false);
   
@@ -245,8 +247,8 @@ export default function App() {
   const filteredDashboardStats = useMemo(() => {
     if (!dashboardStats) return null;
     
-    // If "ALL" is selected, return the dashboard stats with summed config if present
-    if (selectedDashboardSatwas.includes("ALL")) {
+    // If "ALL" is selected and no date range is set, return the dashboard stats with summed config if present
+    if (selectedDashboardSatwas.includes("ALL") && !dashboardStartDate && !dashboardEndDate) {
       if (config?.TARGET_SATWAS) {
         let sumPagu = 0;
         let sumTarget = 0;
@@ -274,10 +276,19 @@ export default function App() {
       return dashboardStats;
     }
 
-    // Otherwise, filter examinations by selected satwas
-    const filteredPems = pemeriksaan ? pemeriksaan.filter(p => selectedDashboardSatwas.includes(p.satwas)) : [];
+    // Otherwise, filter examinations by selected satwas and date range
+    let filteredPems = pemeriksaan || [];
+    if (!selectedDashboardSatwas.includes("ALL")) {
+      filteredPems = filteredPems.filter(p => selectedDashboardSatwas.includes(p.satwas));
+    }
+    if (dashboardStartDate) {
+      filteredPems = filteredPems.filter(p => p.tanggal >= dashboardStartDate);
+    }
+    if (dashboardEndDate) {
+      filteredPems = filteredPems.filter(p => p.tanggal <= dashboardEndDate);
+    }
     
-    // Recalculate statistics for the selected satwas
+    // Recalculate statistics for the selected criteria
     const totalPemeriksaan = filteredPems.length;
     let totalTaat = 0;
     let totalTidakTaat = 0;
@@ -323,8 +334,18 @@ export default function App() {
     ];
 
     // Satwas representation for comparing chosen Satwas
-    const chartNilaiSatwas = selectedDashboardSatwas.map(satName => {
-      const satPems = pemeriksaan ? pemeriksaan.filter(p => p.satwas === satName) : [];
+    const comparisonSatwasList = !selectedDashboardSatwas.includes("ALL")
+      ? selectedDashboardSatwas
+      : (satwasList.length > 0 ? satwasList.map(s => s.nama_satwas) : ["Stasiun PSDKP Biak", "Satwas SDKP Manokwari", "Satwas SDKP Jayapura", "Satwas SDK Nabire"]);
+
+    const chartNilaiSatwas = comparisonSatwasList.map(satName => {
+      let satPems = pemeriksaan ? pemeriksaan.filter(p => p.satwas === satName) : [];
+      if (dashboardStartDate) {
+        satPems = satPems.filter(p => p.tanggal >= dashboardStartDate);
+      }
+      if (dashboardEndDate) {
+        satPems = satPems.filter(p => p.tanggal <= dashboardEndDate);
+      }
       const satTotal = satPems.length;
       const satSum = satPems.reduce((acc, p) => acc + (Number(p.nilai_total) || 0), 0);
       return {
@@ -372,7 +393,11 @@ export default function App() {
     let targetQ1 = 0, targetQ2 = 0, targetQ3 = 0, targetQ4 = 0;
     let realisasiQ1 = 0, realisasiQ2 = 0, realisasiQ3 = 0, realisasiQ4 = 0;
 
-    selectedDashboardSatwas.forEach((satName) => {
+    const budgetSatwasList = !selectedDashboardSatwas.includes("ALL")
+      ? selectedDashboardSatwas
+      : (satwasList.length > 0 ? satwasList.map(s => s.nama_satwas) : ["Stasiun PSDKP Biak", "Satwas SDKP Manokwari", "Satwas SDKP Jayapura", "Satwas SDK Nabire"]);
+
+    budgetSatwasList.forEach((satName) => {
       const hasSpecificConfig = config?.TARGET_SATWAS && config.TARGET_SATWAS[satName] !== undefined;
       let satPagu = 0, satTarget = 0, satRealisasi = 0;
       let satTQ1 = 0, satTQ2 = 0, satTQ3 = 0, satTQ4 = 0;
@@ -478,7 +503,7 @@ export default function App() {
       realisasiQ3,
       realisasiQ4
     };
-  }, [selectedDashboardSatwas, dashboardStats, pemeriksaan, config]);
+  }, [selectedDashboardSatwas, dashboardStats, pemeriksaan, config, dashboardStartDate, dashboardEndDate, satwasList]);
 
   // Form toggles & edit parameters
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -2649,6 +2674,11 @@ export default function App() {
                               ? "Semua Satwas Wilayah" 
                               : selectedDashboardSatwas.join(", ")}
                           </span>
+                          {!selectedDashboardSatwas.includes("ALL") && selectedDashboardSatwas.length > 1 && (
+                            <span className="bg-sky-600 text-white font-black px-1.5 py-0.5 text-[9px] rounded-full shrink-0 whitespace-nowrap min-w-[18px] text-center">
+                              {selectedDashboardSatwas.length}
+                            </span>
+                          )}
                           {totalAlertsForSelected > 0 && (
                             <span className="bg-rose-550 bg-rose-500 text-white font-black px-2 py-0.5 text-[9px] rounded-lg animate-pulse shrink-0 whitespace-nowrap">
                               {totalAlertsForSelected} Aktif
@@ -2910,6 +2940,47 @@ export default function App() {
                           </motion.div>
                         )}
                       </AnimatePresence>
+                    </div>
+
+                    {/* Date Range Controls */}
+                    <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-3 py-1 shadow-sm h-[38px] min-w-[280px] w-full sm:w-auto">
+                      <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <div className="flex flex-col">
+                          <span className="text-[8px] font-black text-slate-400 uppercase tracking-wider leading-none">Mulai</span>
+                          <input
+                            type="date"
+                            value={dashboardStartDate}
+                            onChange={(e) => setDashboardStartDate(e.target.value)}
+                            className="bg-transparent border-none text-[10px] font-extrabold text-slate-700 focus:outline-none p-0 cursor-pointer w-[95px] max-w-[100px]"
+                            title="Tanggal Mulai"
+                          />
+                        </div>
+                        <div className="h-4 w-[1px] bg-slate-200 self-center shrink-0" />
+                        <div className="flex flex-col">
+                          <span className="text-[8px] font-black text-slate-400 uppercase tracking-wider leading-none">Selesai</span>
+                          <input
+                            type="date"
+                            value={dashboardEndDate}
+                            onChange={(e) => setDashboardEndDate(e.target.value)}
+                            className="bg-transparent border-none text-[10px] font-extrabold text-slate-700 focus:outline-none p-0 cursor-pointer w-[95px] max-w-[100px]"
+                            title="Tanggal Selesai"
+                          />
+                        </div>
+                      </div>
+                      {(dashboardStartDate || dashboardEndDate) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDashboardStartDate("");
+                            setDashboardEndDate("");
+                          }}
+                          className="p-1 hover:bg-slate-200 text-slate-500 hover:text-slate-800 rounded-lg transition-all ml-auto cursor-pointer flex items-center justify-center shrink-0"
+                          title="Reset Filter Tanggal"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
 
                     {/* Alert Rules Setting Button */}
