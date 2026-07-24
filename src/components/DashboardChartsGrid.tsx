@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { motion } from "motion/react";
-import { GripVertical, RotateCcw } from "lucide-react";
 import { DashboardStats } from "../types";
 import {
   PemeriksaanBulananChart,
@@ -24,6 +23,18 @@ export const DashboardChartsGrid: React.FC<DashboardChartsGridProps> = ({ stats 
       } catch (e) {}
     }
     return ["pemeriksaan_bulanan", "ketaatan_pie", "nilai_satwas", "trend_tahunan", "trend_bulanan"];
+  });
+
+  const [hiddenCharts, setHiddenCharts] = useState<string[]>(() => {
+    const saved = localStorage.getItem("mekanik_hidden_charts");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+    }
+    // Default trend_tahunan & trend_bulanan as hidden per user request to delete/hapus
+    return ["trend_tahunan", "trend_bulanan"];
   });
 
   const [draggedChartId, setDraggedChartId] = useState<string | null>(null);
@@ -50,9 +61,17 @@ export const DashboardChartsGrid: React.FC<DashboardChartsGridProps> = ({ stats 
     setDraggedChartId(null);
   };
 
-  const resetChartsOrder = () => {
+  const hideChart = (id: string) => {
+    const updated = [...hiddenCharts, id];
+    setHiddenCharts(updated);
+    localStorage.setItem("mekanik_hidden_charts", JSON.stringify(updated));
+  };
+
+  const resetCharts = () => {
     setChartsOrder(["pemeriksaan_bulanan", "ketaatan_pie", "nilai_satwas", "trend_tahunan", "trend_bulanan"]);
+    setHiddenCharts([]);
     localStorage.removeItem("mekanik_charts_order");
+    localStorage.removeItem("mekanik_hidden_charts");
   };
 
   const chartTemplates = [
@@ -94,30 +113,14 @@ export const DashboardChartsGrid: React.FC<DashboardChartsGridProps> = ({ stats 
   ];
 
   const sortedCharts = chartsOrder
+    .filter(id => !hiddenCharts.includes(id))
     .map(id => chartTemplates.find(c => c.id === id))
     .filter((c): c is typeof chartTemplates[number] => !!c);
 
-  const hasCustomChartsOrder = localStorage.getItem("mekanik_charts_order") !== null;
+  const isModified = localStorage.getItem("mekanik_charts_order") !== null || hiddenCharts.length > 0;
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center select-none pt-4">
-        <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
-          <span className="w-1.5 h-3 bg-indigo-500 rounded-xs" />
-          Visualisasi & Chart Kinerja Pengawasan
-        </h3>
-        {hasCustomChartsOrder && (
-          <button
-            onClick={resetChartsOrder}
-            className="flex items-center gap-1 px-2.5 py-1 text-[9px] font-bold text-slate-500 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 rounded-lg transition-all cursor-pointer"
-            title="Kembalikan tata letak diagram ke setelan pabrik"
-          >
-            <RotateCcw className="w-2.5 h-2.5" />
-            Reset Tata Letak Diagram
-          </button>
-        )}
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {sortedCharts.map((chart) => {
           const isDragging = draggedChartId === chart.id;
@@ -142,15 +145,8 @@ export const DashboardChartsGrid: React.FC<DashboardChartsGridProps> = ({ stats 
                   : "hover:shadow-md cursor-grab active:cursor-grabbing hover:border-slate-350"
               }`}
             >
-              {/* Drag handle */}
-              <div className="absolute right-4 top-4 text-slate-400 opacity-25 group-hover/chart:opacity-85 transition-opacity cursor-grab active:cursor-grabbing flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200/50">
-                <GripVertical className="w-3.5 h-3.5" />
-                <span className="text-[8px] font-black uppercase tracking-wider text-slate-450 hidden sm:inline select-none">Tahan & Geser</span>
-              </div>
-
-              <div className="pr-12">
+              <div className="mb-2">
                 <h3 className="text-sm font-bold text-slate-850">{chart.title}</h3>
-                <p className="text-[10px] text-slate-400 mb-4 font-semibold font-sans leading-relaxed">{chart.desc}</p>
               </div>
 
               <div className="pt-2">

@@ -12,7 +12,8 @@ import {
   PiggyBank,
   Target,
   GripVertical,
-  RotateCcw
+  RotateCcw,
+  X
 } from "lucide-react";
 import { DashboardStats } from "../types";
 
@@ -70,6 +71,17 @@ export const KPICards: React.FC<KPICardsProps> = ({ stats, alertRules }) => {
     }
     return ["pagu", "target_realisasi", "realisasi", "sisa", "penyerapan_pagu", "penyerapan_target"];
   });
+
+  // State for showing/hiding trend chart section (default false per delete request)
+  const [showTrendChart, setShowTrendChart] = React.useState<boolean>(() => {
+    const saved = localStorage.getItem("mekanik_show_trend_chart");
+    return saved !== null ? saved === "true" : false;
+  });
+
+  const toggleTrendChart = (val: boolean) => {
+    setShowTrendChart(val);
+    localStorage.setItem("mekanik_show_trend_chart", String(val));
+  };
 
   // Drag and Drop state variables
   const [draggedCardId, setDraggedCardId] = React.useState<string | null>(null);
@@ -309,16 +321,25 @@ export const KPICards: React.FC<KPICardsProps> = ({ stats, alertRules }) => {
             <span className="w-1.5 h-3 bg-sky-500 rounded-xs" />
             Indikator Kinerja Utama & Pengawasan
           </h3>
-          {hasCustomPerfOrder && (
+          <div className="flex items-center gap-2">
             <button
-              onClick={resetPerfOrder}
-              className="flex items-center gap-1 px-2.5 py-1 text-[9px] font-bold text-slate-500 hover:text-sky-600 bg-slate-50 hover:bg-sky-50 border border-slate-200 hover:border-sky-200 rounded-lg transition-all cursor-pointer select-none"
-              title="Kembalikan urutan kartu statistik ke setelan pabrik"
+              onClick={() => toggleTrendChart(!showTrendChart)}
+              className="flex items-center gap-1 px-2.5 py-1 text-[9px] font-bold text-slate-500 hover:text-cyan-600 bg-slate-50 hover:bg-cyan-50 border border-slate-200 hover:border-cyan-200 rounded-lg transition-all cursor-pointer select-none"
+              title={showTrendChart ? "Sembunyikan grafik tren ketaatan bulanan" : "Tampilkan grafik tren ketaatan bulanan"}
             >
-              <RotateCcw className="w-2.5 h-2.5" />
-              Reset Tata Letak
+              {showTrendChart ? "Sembunyikan Grafik Tren" : "Tampilkan Grafik Tren"}
             </button>
-          )}
+            {hasCustomPerfOrder && (
+              <button
+                onClick={resetPerfOrder}
+                className="flex items-center gap-1 px-2.5 py-1 text-[9px] font-bold text-slate-500 hover:text-sky-600 bg-slate-50 hover:bg-sky-50 border border-slate-200 hover:border-sky-200 rounded-lg transition-all cursor-pointer select-none"
+                title="Kembalikan urutan kartu statistik ke setelan pabrik"
+              >
+                <RotateCcw className="w-2.5 h-2.5" />
+                Reset Tata Letak
+              </button>
+            )}
+          </div>
         </div>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -365,47 +386,58 @@ export const KPICards: React.FC<KPICardsProps> = ({ stats, alertRules }) => {
       </div>
 
       {/* Tren Ketaatan Bulanan Section */}
-      <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm space-y-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-slate-100">
-          <div className="space-y-1">
-            <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5 select-none">
-              <span className="w-1.5 h-3 bg-cyan-500 rounded-xs" />
-              Tren Persentase Ketaatan Pelaku Usaha (Bulanan)
-            </h3>
-            <p className="text-[10px] text-slate-400 font-semibold font-sans">
-              Analisis perbandingan persentase kepatuhan kualitatif (TAAT) tahun ini (2026) vs tahun lalu (2025) secara bulanan
-            </p>
-          </div>
+      {showTrendChart && (
+        <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm space-y-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-slate-100">
+            <div className="space-y-1">
+              <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5 select-none">
+                <span className="w-1.5 h-3 bg-cyan-500 rounded-xs" />
+                Tren Persentase Ketaatan Pelaku Usaha (Bulanan)
+              </h3>
+              <p className="text-[10px] text-slate-400 font-semibold font-sans">
+                Analisis perbandingan persentase kepatuhan kualitatif (TAAT) tahun ini (2026) vs tahun lalu (2025) secara bulanan
+              </p>
+            </div>
 
-          {/* Quick Stats Panel */}
-          {(() => {
-            const trendData = stats.chartKetaatanTrend ?? [];
-            const avgIni = trendData.length > 0 ? Number((trendData.reduce((acc, curr) => acc + curr.tahunIni, 0) / trendData.length).toFixed(1)) : 0;
-            const avgLalu = trendData.length > 0 ? Number((trendData.reduce((acc, curr) => acc + curr.tahunLalu, 0) / trendData.length).toFixed(1)) : 0;
-            const diffAvg = Number((avgIni - avgLalu).toFixed(1));
+            <div className="flex items-center gap-3">
+              {/* Quick Stats Panel */}
+              {(() => {
+                const trendData = stats.chartKetaatanTrend ?? [];
+                const avgIni = trendData.length > 0 ? Number((trendData.reduce((acc, curr) => acc + curr.tahunIni, 0) / trendData.length).toFixed(1)) : 0;
+                const avgLalu = trendData.length > 0 ? Number((trendData.reduce((acc, curr) => acc + curr.tahunLalu, 0) / trendData.length).toFixed(1)) : 0;
+                const diffAvg = Number((avgIni - avgLalu).toFixed(1));
 
-            return (
-              <div className="flex items-center gap-4 bg-slate-50 border border-slate-200/60 p-3 rounded-2xl">
-                <div>
-                  <span className="block text-[8px] font-black uppercase text-slate-450 tracking-wider">Rata-Rata Ketaatan</span>
-                  <div className="flex items-baseline gap-2 mt-0.5">
-                    <span className="text-sm font-extrabold text-slate-800 font-mono">{avgIni}% <span className="text-[10px] text-slate-400 font-sans font-normal">Tahun Ini</span></span>
-                    <span className="text-[10px] text-slate-450 font-mono">vs {avgLalu}% <span className="text-[9px] text-slate-400 font-sans font-normal">Tahun Lalu</span></span>
+                return (
+                  <div className="flex items-center gap-4 bg-slate-50 border border-slate-200/60 p-3 rounded-2xl">
+                    <div>
+                      <span className="block text-[8px] font-black uppercase text-slate-450 tracking-wider">Rata-Rata Ketaatan</span>
+                      <div className="flex items-baseline gap-2 mt-0.5">
+                        <span className="text-sm font-extrabold text-slate-800 font-mono">{avgIni}% <span className="text-[10px] text-slate-400 font-sans font-normal">Tahun Ini</span></span>
+                        <span className="text-[10px] text-slate-450 font-mono">vs {avgLalu}% <span className="text-[9px] text-slate-400 font-sans font-normal">Tahun Lalu</span></span>
+                      </div>
+                    </div>
+
+                    <div className="border-l border-slate-200 h-8 self-center" />
+
+                    <div className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl font-bold text-[10px] ${
+                      diffAvg >= 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"
+                    }`}>
+                      {diffAvg >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                      <span>{diffAvg >= 0 ? `+${diffAvg}%` : `${diffAvg}%`} Trend</span>
+                    </div>
                   </div>
-                </div>
+                );
+              })()}
 
-                <div className="border-l border-slate-200 h-8 self-center" />
-
-                <div className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl font-bold text-[10px] ${
-                  diffAvg >= 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"
-                }`}>
-                  {diffAvg >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                  <span>{diffAvg >= 0 ? `+${diffAvg}%` : `${diffAvg}%`} Trend</span>
-                </div>
-              </div>
-            );
-          })()}
-        </div>
+              <button
+                onClick={() => toggleTrendChart(false)}
+                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 rounded-xl transition-all cursor-pointer"
+                title="Hapus / Sembunyikan Tren Ketaatan"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
 
         {/* SVG Comparative Chart Area */}
         {(() => {
@@ -633,6 +665,7 @@ export const KPICards: React.FC<KPICardsProps> = ({ stats, alertRules }) => {
           </div>
         </div>
       </div>
+      )}
 
       {/* Keuangan & Anggaran Section */}
       <div>

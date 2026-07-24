@@ -123,6 +123,16 @@ export default function App() {
   const [isResettingFilter, setIsResettingFilter] = useState(false);
   const [isAutoSyncEnabled, setIsAutoSyncEnabled] = useState(false);
   
+  const [showSatwasFilterSection, setShowSatwasFilterSection] = useState<boolean>(() => {
+    const saved = localStorage.getItem("mekanik_show_satwas_filter");
+    return saved !== null ? saved === "true" : false;
+  });
+
+  const toggleSatwasFilterSection = (val: boolean) => {
+    setShowSatwasFilterSection(val);
+    localStorage.setItem("mekanik_show_satwas_filter", String(val));
+  };
+  
   const activeAlertRuleKey = selectedDashboardSatwas.length === 1 ? selectedDashboardSatwas[0] : "ALL";
   
   // Searchable dropdown states
@@ -1133,12 +1143,16 @@ export default function App() {
     doc.text("STATUS SISTEM DATA      :", 110, 51);
     doc.text("PERIODE PELAPORAN      :", 110, 56);
 
+    const periodeStr = dashboardStartDate || dashboardEndDate
+      ? `${dashboardStartDate || 'Awal'} s.d. ${dashboardEndDate || 'Akhir'}`
+      : "TAHUN ANGGARAN 2026";
+
     doc.setFont("helvetica", "bold");
     doc.setTextColor(15, 23, 42);
     doc.text(shareName.toUpperCase(), 58, 51);
     doc.text(currentDateStr.toUpperCase(), 58, 56);
     doc.text("AKTIF / VALID (GOOGLE BLUEPRINT)", 150, 51);
-    doc.text("TAHUN ANGGARAN 2026", 150, 56);
+    doc.text(periodeStr.toUpperCase(), 150, 56);
 
     // Helper functions inside
     const formatRupiahLocal = (value?: number) => {
@@ -2383,266 +2397,44 @@ export default function App() {
                 </div>
               ) : null}
 
-
-
               {/* Stats Counters Grid */}
               <KPICards stats={filteredDashboardStats} alertRules={satwasAlertRules[selectedDashboardSatwas]} />
-
-              {/* SECTION: CATATAN SINGKAT / STICKY NOTES HARIAN PIMPINAN */}
-              <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-xs space-y-4">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
-                  <div className="space-y-1">
-                    <h3 className="text-sm font-black text-slate-850 flex items-center gap-2">
-                      <StickyNote className="w-4 h-4 text-amber-500" />
-                      Catatan Singkat & Instruksi Harian Pimpinan Timja SDK
-                    </h3>
-                    <p className="text-[10px] text-slate-400 font-semibold font-sans">
-                      Arahan kerja harian, prioritas operasional, dan pesan penting dari pimpinan untuk seluruh anggota tim
-                    </p>
-                  </div>
-
-                  {(currentUser?.role === "Administrator" || currentUser?.role === "Kepala Stasiun") && (
-                    <button
-                      onClick={() => {
-                        setEditingNoteId(null);
-                        setNewNoteTitle("");
-                        setNewNoteContent("");
-                        setNewNoteColor("bg-amber-100 border-amber-300 text-amber-950");
-                        setNewNotePinned(false);
-                        setShowNoteForm(!showNoteForm);
-                      }}
-                      className="w-full sm:w-auto px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-[11px] rounded-xl transition-all duration-200 shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      {showNoteForm ? (
-                        <>
-                          <X className="w-3.5 h-3.5" />
-                          Tutup Form
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="w-3.5 h-3.5" />
-                          Tambah Instruksi
-                        </>
-                      )}
-                    </button>
-                  )}
-                </div>
-
-                {/* NOTE ENTRY/EDIT FORM */}
-                {showNoteForm && (currentUser?.role === "Administrator" || currentUser?.role === "Kepala Stasiun") && (
-                  <motion.form
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    onSubmit={handleSaveDashboardNote}
-                    className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4 shadow-inner"
-                  >
-                    <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-cyan-500" />
-                      {editingNoteId ? "Ubah Instruksi Harian" : "Buat Instruksi Harian Baru"}
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Judul Instruksi</label>
-                        <input
-                          type="text"
-                          placeholder="Contoh: Fokus Verifikasi SPT Triwulan III"
-                          value={newNoteTitle}
-                          onChange={(e) => setNewNoteTitle(e.target.value)}
-                          className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 font-extrabold text-slate-800"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Warna Kertas Catatan</label>
-                        <div className="flex flex-wrap gap-2 pt-1">
-                          {[
-                            { bg: "bg-amber-100 border-amber-300 text-amber-950", dot: "bg-amber-500", label: "Kuning" },
-                            { bg: "bg-teal-100 border-teal-300 text-teal-950", dot: "bg-teal-500", label: "Tosca" },
-                            { bg: "bg-rose-100 border-rose-300 text-rose-950", dot: "bg-rose-500", label: "Merah" },
-                            { bg: "bg-sky-100 border-sky-300 text-sky-950", dot: "bg-sky-500", label: "Biru" },
-                            { bg: "bg-emerald-100 border-emerald-300 text-emerald-950", dot: "bg-emerald-500", label: "Hijau" },
-                            { bg: "bg-slate-100 border-slate-300 text-slate-950", dot: "bg-slate-500", label: "Abu-abu" }
-                          ].map((col) => (
-                            <button
-                              type="button"
-                              key={col.bg}
-                              onClick={() => setNewNoteColor(col.bg)}
-                              className={`px-2.5 py-1 rounded-lg text-[9px] font-extrabold flex items-center gap-1.5 border transition-all cursor-pointer ${
-                                newNoteColor === col.bg 
-                                  ? "ring-2 ring-slate-800 ring-offset-1 scale-105 border-transparent font-black" 
-                                  : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
-                              }`}
-                            >
-                              <span className={`w-1.5 h-1.5 rounded-full ${col.dot}`} />
-                              {col.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Isi Arahan / Instruksi</label>
-                      <textarea
-                        id="newNoteContent"
-                        rows={3}
-                        placeholder="Masukkan instruksi detil harian di sini..."
-                        value={newNoteContent}
-                        onChange={(e) => setNewNoteContent(e.target.value)}
-                        required
-                        className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 font-bold text-slate-800"
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between pt-1">
-                      <label className="flex items-center gap-2 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={newNotePinned}
-                          onChange={(e) => setNewNotePinned(e.target.checked)}
-                          className="w-3.5 h-3.5 text-sky-600 border-slate-300 rounded focus:ring-sky-500 cursor-pointer"
-                        />
-                        <span className="text-[10px] font-bold text-slate-600 flex items-center gap-1">
-                          <Pin className="w-3 h-3 text-slate-400 rotate-45" />
-                          Sematkan Catatan (Pin di atas)
-                        </span>
-                      </label>
-
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingNoteId(null);
-                            setNewNoteTitle("");
-                            setNewNoteContent("");
-                            setNewNoteColor("bg-amber-100 border-amber-300 text-amber-950");
-                            setNewNotePinned(false);
-                            setShowNoteForm(false);
-                          }}
-                          className="px-3 py-1.5 text-[10px] font-bold text-slate-500 hover:text-slate-800 bg-transparent transition-all cursor-pointer"
-                        >
-                          Batal
-                        </button>
-                        <button
-                          type="submit"
-                          className="px-4 py-1.5 bg-sky-600 hover:bg-sky-500 text-white font-extrabold text-[10px] rounded-lg shadow-sm transition-all cursor-pointer"
-                        >
-                          {editingNoteId ? "Simpan Perubahan" : "Posting Instruksi"}
-                        </button>
-                      </div>
-                    </div>
-                  </motion.form>
-                )}
-
-                {/* LIST OF STICKY NOTES */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {dashboardNotes.length === 0 ? (
-                    <div className="col-span-full py-8 text-center rounded-2xl bg-slate-50 border border-dashed border-slate-200 flex flex-col items-center justify-center gap-2">
-                      <StickyNote className="w-8 h-8 text-slate-300 animate-pulse" />
-                      <div className="text-xs font-bold text-slate-600">Belum ada Catatan / Instruksi Harian</div>
-                      <div className="text-[10px] text-slate-400 max-w-sm px-4 leading-relaxed">
-                        Arahan harian dari pimpinan Timja SDK belum dibuat.
-                        {currentUser?.role === "Administrator" || currentUser?.role === "Kepala Stasiun" ? " Klik tombol 'Tambah Instruksi' untuk menulis pesan arahan pertama Anda." : " Hubungi Administrator atau Kepala Stasiun untuk meninggalkan instruksi."}
-                      </div>
-                    </div>
-                  ) : (
-                    // Sort pinned notes first, then by timestamp descending
-                    [...dashboardNotes]
-                      .sort((a, b) => {
-                        if (a.pinned && !b.pinned) return -1;
-                        if (!a.pinned && b.pinned) return 1;
-                        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-                      })
-                      .map((note) => {
-                        const bgClass = note.color || "bg-amber-100 border-amber-300 text-amber-950";
-                        return (
-                          <div
-                            key={note.id}
-                            className={`p-5 rounded-2xl border flex flex-col justify-between gap-4 shadow-xs relative hover:shadow-md hover:scale-[1.01] transition-all duration-200 ${bgClass}`}
-                          >
-                            {/* Pin Stamp Badge */}
-                            {note.pinned && (
-                              <div className="absolute -top-2 -right-2 bg-rose-500 text-white p-1 rounded-full shadow-md z-10" title="Disematkan oleh pimpinan">
-                                <Pin className="w-3.5 h-3.5 rotate-45" />
-                              </div>
-                            )}
-
-                            <div className="space-y-2">
-                              <div className="flex justify-between items-start gap-2">
-                                <h4 className="text-xs font-black tracking-tight leading-tight uppercase">
-                                  {note.title || "Instruksi Harian"}
-                                </h4>
-                                
-                                {/* CRUD controls for SDK leaders */}
-                                {(currentUser?.role === "Administrator" || currentUser?.role === "Kepala Stasiun") && (
-                                  <div className="flex items-center gap-1.5 shrink-0 bg-white/40 p-1 rounded-lg">
-                                    <button
-                                      onClick={() => handleTogglePinDashboardNote(note)}
-                                      className="p-1 text-slate-700 hover:text-slate-900 rounded-md hover:bg-white/60 transition-colors cursor-pointer"
-                                      title={note.pinned ? "Batal Sematkan" : "Sematkan"}
-                                    >
-                                      <Pin className={`w-3 h-3 ${note.pinned ? "text-rose-600 fill-rose-600 animate-pulse" : "text-slate-500"}`} />
-                                    </button>
-                                    <button
-                                      onClick={() => handleEditDashboardNoteClick(note)}
-                                      className="p-1 text-slate-700 hover:text-slate-900 rounded-md hover:bg-white/60 transition-colors cursor-pointer"
-                                      title="Ubah"
-                                    >
-                                      <Edit3 className="w-3 h-3 text-sky-700" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteDashboardNote(note.id)}
-                                      className="p-1 text-slate-700 hover:text-rose-700 rounded-md hover:bg-white/60 transition-colors cursor-pointer"
-                                      title="Hapus"
-                                    >
-                                      <Trash2 className="w-3 h-3 text-rose-700" />
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-
-                              <p className="text-[11px] font-bold leading-relaxed whitespace-pre-wrap opacity-95">
-                                {note.content}
-                              </p>
-                            </div>
-
-                            <div className="border-t border-slate-950/10 pt-2 flex justify-between items-center text-[9px] font-bold opacity-80">
-                              <div className="flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-slate-950/40 inline-block animate-pulse" />
-                                <span>{note.author || "Pimpinan SDK"}</span>
-                              </div>
-                              <span>
-                                {new Date(note.timestamp).toLocaleDateString("id-ID", {
-                                  day: "numeric",
-                                  month: "short",
-                                  year: "2026" === new Date(note.timestamp).getFullYear().toString() ? undefined : "numeric"
-                                })} {new Date(note.timestamp).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })
-                  )}
-                </div>
-              </div>
-
-
 
               {/* Grid of Custom SVG Charts */}
               <DashboardChartsGrid stats={filteredDashboardStats} />
 
               {/* Filter Satwas Wilayah */}
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white border border-slate-200 p-5 rounded-3xl shadow-xs">
-                <div className="space-y-1">
-                  <h3 className="text-sm font-black text-slate-850 flex items-center gap-2">
-                    <span className="w-1.5 h-4 bg-sky-500 rounded-xs inline-block" />
-                    Penyaringan Wilayah Kerja (Satwas)
-                  </h3>
-                  <p className="text-[10px] text-slate-400 font-semibold font-sans">
-                    Lihat statistik performa ketaatan dan alokasi anggaran spesifik per wilayah kerja satwas
-                  </p>
+              {!showSatwasFilterSection && (
+                <div className="flex justify-end no-print">
+                  <button
+                    onClick={() => toggleSatwasFilterSection(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-extrabold text-slate-500 hover:text-sky-600 bg-white hover:bg-sky-50 border border-slate-200 hover:border-sky-200 rounded-xl transition-all cursor-pointer shadow-xs"
+                    title="Tampilkan Kembali Filter Penyaringan Wilayah"
+                  >
+                    <Sliders className="w-3.5 h-3.5 text-sky-500" />
+                    Tampilkan Penyaringan Wilayah (Satwas)
+                  </button>
                 </div>
+              )}
+
+              {showSatwasFilterSection && (
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white border border-slate-200 p-5 rounded-3xl shadow-xs relative">
+                  <button
+                    onClick={() => toggleSatwasFilterSection(false)}
+                    className="absolute top-3 right-3 p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer no-print"
+                    title="Hapus / Sembunyikan Penyaringan Satwas"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                  <div className="space-y-1 pr-8">
+                    <h3 className="text-sm font-black text-slate-850 flex items-center gap-2">
+                      <span className="w-1.5 h-4 bg-sky-500 rounded-xs inline-block" />
+                      Penyaringan Wilayah Kerja (Satwas)
+                    </h3>
+                    <p className="text-[10px] text-slate-400 font-semibold font-sans">
+                      Lihat statistik performa ketaatan dan alokasi anggaran spesifik per wilayah kerja satwas
+                    </p>
+                  </div>
                 
                 <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
                   <div className="w-full sm:w-auto flex items-center gap-2 flex-wrap sm:flex-nowrap">
@@ -3090,10 +2882,10 @@ export default function App() {
                   <button
                     onClick={handleDownloadDashboardPDF}
                     className="w-full sm:w-auto px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-extrabold text-xs rounded-2xl transition-all duration-200 shadow-sm flex items-center justify-center gap-2 border border-rose-500/20 whitespace-nowrap cursor-pointer no-print"
-                    title="Unduh Laporan Dashboard Kinerja Utama sebagai PDF Resmi"
+                    title="Ekspor Laporan Dashboard Kinerja Utama sebagai PDF Resmi"
                   >
                     <Download className="w-4 h-4 text-rose-100" />
-                    Unduh PDF Dashboard
+                    Ekspor PDF
                   </button>
 
                   <button
@@ -3110,6 +2902,246 @@ export default function App() {
                     <QrCode className="w-4 h-4 text-cyan-100" />
                     QR Akses
                   </button>
+                </div>
+              </div>
+              )}
+
+              {/* SECTION: CATATAN SINGKAT / STICKY NOTES HARIAN PIMPINAN */}
+              <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-black text-slate-850 flex items-center gap-2">
+                      <StickyNote className="w-4 h-4 text-amber-500" />
+                      Catatan Singkat & Instruksi Harian Pimpinan Timja SDK
+                    </h3>
+                    <p className="text-[10px] text-slate-400 font-semibold font-sans">
+                      Arahan kerja harian, prioritas operasional, dan pesan penting dari pimpinan untuk seluruh anggota tim
+                    </p>
+                  </div>
+
+                  {(currentUser?.role === "Administrator" || currentUser?.role === "Kepala Stasiun") && (
+                    <button
+                      onClick={() => {
+                        setEditingNoteId(null);
+                        setNewNoteTitle("");
+                        setNewNoteContent("");
+                        setNewNoteColor("bg-amber-100 border-amber-300 text-amber-950");
+                        setNewNotePinned(false);
+                        setShowNoteForm(!showNoteForm);
+                      }}
+                      className="w-full sm:w-auto px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-[11px] rounded-xl transition-all duration-200 shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      {showNoteForm ? (
+                        <>
+                          <X className="w-3.5 h-3.5" />
+                          Tutup Form
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-3.5 h-3.5" />
+                          Tambah Instruksi
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+
+                {/* NOTE ENTRY/EDIT FORM */}
+                {showNoteForm && (currentUser?.role === "Administrator" || currentUser?.role === "Kepala Stasiun") && (
+                  <motion.form
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    onSubmit={handleSaveDashboardNote}
+                    className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4 shadow-inner"
+                  >
+                    <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-cyan-500" />
+                      {editingNoteId ? "Ubah Instruksi Harian" : "Buat Instruksi Harian Baru"}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Judul Instruksi</label>
+                        <input
+                          type="text"
+                          placeholder="Contoh: Fokus Verifikasi SPT Triwulan III"
+                          value={newNoteTitle}
+                          onChange={(e) => setNewNoteTitle(e.target.value)}
+                          className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 font-extrabold text-slate-800"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Warna Kertas Catatan</label>
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {[
+                            { bg: "bg-amber-100 border-amber-300 text-amber-950", dot: "bg-amber-500", label: "Kuning" },
+                            { bg: "bg-teal-100 border-teal-300 text-teal-950", dot: "bg-teal-500", label: "Tosca" },
+                            { bg: "bg-rose-100 border-rose-300 text-rose-950", dot: "bg-rose-500", label: "Merah" },
+                            { bg: "bg-sky-100 border-sky-300 text-sky-950", dot: "bg-sky-500", label: "Biru" },
+                            { bg: "bg-emerald-100 border-emerald-300 text-emerald-950", dot: "bg-emerald-500", label: "Hijau" },
+                            { bg: "bg-slate-100 border-slate-300 text-slate-950", dot: "bg-slate-500", label: "Abu-abu" }
+                          ].map((col) => (
+                            <button
+                              type="button"
+                              key={col.bg}
+                              onClick={() => setNewNoteColor(col.bg)}
+                              className={`px-2.5 py-1 rounded-lg text-[9px] font-extrabold flex items-center gap-1.5 border transition-all cursor-pointer ${
+                                newNoteColor === col.bg 
+                                  ? "ring-2 ring-slate-800 ring-offset-1 scale-105 border-transparent font-black" 
+                                  : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
+                              }`}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full ${col.dot}`} />
+                              {col.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Isi Arahan / Instruksi</label>
+                      <textarea
+                        id="newNoteContent"
+                        rows={3}
+                        placeholder="Masukkan instruksi detil harian di sini..."
+                        value={newNoteContent}
+                        onChange={(e) => setNewNoteContent(e.target.value)}
+                        required
+                        className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 font-bold text-slate-800"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={newNotePinned}
+                          onChange={(e) => setNewNotePinned(e.target.checked)}
+                          className="w-3.5 h-3.5 text-sky-600 border-slate-300 rounded focus:ring-sky-500 cursor-pointer"
+                        />
+                        <span className="text-[10px] font-bold text-slate-600 flex items-center gap-1">
+                          <Pin className="w-3 h-3 text-slate-400 rotate-45" />
+                          Sematkan Catatan (Pin di atas)
+                        </span>
+                      </label>
+
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingNoteId(null);
+                            setNewNoteTitle("");
+                            setNewNoteContent("");
+                            setNewNoteColor("bg-amber-100 border-amber-300 text-amber-950");
+                            setNewNotePinned(false);
+                            setShowNoteForm(false);
+                          }}
+                          className="px-3 py-1.5 text-[10px] font-bold text-slate-500 hover:text-slate-800 bg-transparent transition-all cursor-pointer"
+                        >
+                          Batal
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-4 py-1.5 bg-sky-600 hover:bg-sky-500 text-white font-extrabold text-[10px] rounded-lg shadow-sm transition-all cursor-pointer"
+                        >
+                          {editingNoteId ? "Simpan Perubahan" : "Posting Instruksi"}
+                        </button>
+                      </div>
+                    </div>
+                  </motion.form>
+                )}
+
+                {/* LIST OF STICKY NOTES */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {dashboardNotes.length === 0 ? (
+                    <div className="col-span-full py-8 text-center rounded-2xl bg-slate-50 border border-dashed border-slate-200 flex flex-col items-center justify-center gap-2">
+                      <StickyNote className="w-8 h-8 text-slate-300 animate-pulse" />
+                      <div className="text-xs font-bold text-slate-600">Belum ada Catatan / Instruksi Harian</div>
+                      <div className="text-[10px] text-slate-400 max-w-sm px-4 leading-relaxed">
+                        Arahan harian dari pimpinan Timja SDK belum dibuat.
+                        {currentUser?.role === "Administrator" || currentUser?.role === "Kepala Stasiun" ? " Klik tombol 'Tambah Instruksi' untuk menulis pesan arahan pertama Anda." : " Hubungi Administrator atau Kepala Stasiun untuk meninggalkan instruksi."}
+                      </div>
+                    </div>
+                  ) : (
+                    // Sort pinned notes first, then by timestamp descending
+                    [...dashboardNotes]
+                      .sort((a, b) => {
+                        if (a.pinned && !b.pinned) return -1;
+                        if (!a.pinned && b.pinned) return 1;
+                        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+                      })
+                      .map((note) => {
+                        const bgClass = note.color || "bg-amber-100 border-amber-300 text-amber-950";
+                        return (
+                          <div
+                            key={note.id}
+                            className={`p-5 rounded-2xl border flex flex-col justify-between gap-4 shadow-xs relative hover:shadow-md hover:scale-[1.01] transition-all duration-200 ${bgClass}`}
+                          >
+                            {/* Pin Stamp Badge */}
+                            {note.pinned && (
+                              <div className="absolute -top-2 -right-2 bg-rose-500 text-white p-1 rounded-full shadow-md z-10" title="Disematkan oleh pimpinan">
+                                <Pin className="w-3.5 h-3.5 rotate-45" />
+                              </div>
+                            )}
+
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-start gap-2">
+                                <h4 className="text-xs font-black tracking-tight leading-tight uppercase">
+                                  {note.title || "Instruksi Harian"}
+                                </h4>
+                                
+                                {/* CRUD controls for SDK leaders */}
+                                {(currentUser?.role === "Administrator" || currentUser?.role === "Kepala Stasiun") && (
+                                  <div className="flex items-center gap-1.5 shrink-0 bg-white/40 p-1 rounded-lg">
+                                    <button
+                                      onClick={() => handleTogglePinDashboardNote(note)}
+                                      className="p-1 text-slate-700 hover:text-slate-900 rounded-md hover:bg-white/60 transition-colors cursor-pointer"
+                                      title={note.pinned ? "Batal Sematkan" : "Sematkan"}
+                                    >
+                                      <Pin className={`w-3 h-3 ${note.pinned ? "text-rose-600 fill-rose-600 animate-pulse" : "text-slate-500"}`} />
+                                    </button>
+                                    <button
+                                      onClick={() => handleEditDashboardNoteClick(note)}
+                                      className="p-1 text-slate-700 hover:text-slate-900 rounded-md hover:bg-white/60 transition-colors cursor-pointer"
+                                      title="Ubah"
+                                    >
+                                      <Edit3 className="w-3 h-3 text-sky-700" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteDashboardNote(note.id)}
+                                      className="p-1 text-slate-700 hover:text-rose-700 rounded-md hover:bg-white/60 transition-colors cursor-pointer"
+                                      title="Hapus"
+                                    >
+                                      <Trash2 className="w-3 h-3 text-rose-700" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+
+                              <p className="text-[11px] font-bold leading-relaxed whitespace-pre-wrap opacity-95">
+                                {note.content}
+                              </p>
+                            </div>
+
+                            <div className="border-t border-slate-950/10 pt-2 flex justify-between items-center text-[9px] font-bold opacity-80">
+                              <div className="flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-950/40 inline-block animate-pulse" />
+                                <span>{note.author || "Pimpinan SDK"}</span>
+                              </div>
+                              <span>
+                                {new Date(note.timestamp).toLocaleDateString("id-ID", {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "2026" === new Date(note.timestamp).getFullYear().toString() ? undefined : "numeric"
+                                })} {new Date(note.timestamp).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })
+                  )}
                 </div>
               </div>
             </motion.div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { DEFAULT_APPS_SCRIPT_CODE } from "../lib/defaultAppsScript";
 import { 
   Database, 
   CloudLightning, 
@@ -228,6 +229,9 @@ export const ConfigSettings: React.FC<ConfigSettingsProps> = ({ config, satwasLi
     setLoadingCode(true);
     fetch("/api/appsscript-code")
       .then(async (res) => {
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
         const text = await res.text();
         if (!text) return { success: false };
         try {
@@ -237,11 +241,16 @@ export const ConfigSettings: React.FC<ConfigSettingsProps> = ({ config, satwasLi
         }
       })
       .then((res) => {
-        if (res.success) {
+        if (res.success && res.code) {
           setAppsScriptCode(res.code);
+        } else {
+          setAppsScriptCode(DEFAULT_APPS_SCRIPT_CODE);
         }
       })
-      .catch((err) => console.error("Gagal memuat kode Apps Script:", err))
+      .catch((err) => {
+        console.warn("Menggunakan kode Apps Script bawaan (fallback):", err?.message || err);
+        setAppsScriptCode(DEFAULT_APPS_SCRIPT_CODE);
+      })
       .finally(() => setLoadingCode(false));
 
     // Check if token exists on load
